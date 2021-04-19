@@ -838,3 +838,23 @@ DotPlot(combined, assay = "integratedSCT_", features  = markers.to.plot)
 # Plasmacytoid DC - N/A
 markers.to.plot <- c("Ms4a6c", "Plac8", "Bst2", "Irf7", "Irf5")
 DotPlot(combined, assay = "integratedSCT_", features  = markers.to.plot)
+
+# Neutrophil Markers ---------
+# Markers based on Zillionis paper
+markers.to.plot <- c('Mmp8', 'Ifit1', 'Cxcl3', 'Pald1', 'Ccl3', 'Ctsc')
+DefaultAssay(neutro) <- "SCT"
+for (marker in markers.to.plot){
+  FeaturePlot(neutro, features = marker, reduction = 'sct.umap')
+  filename <- paste("neutro_FeaturePlot_", marker, ".png", sep = "")
+  ggsave(filename = filename, width = 5, height = 5)
+}
+DefaultAssay(neutro) <- "integratedSCT_"
+
+# Zillionis dot plots
+# mN1
+markers.to.plot <- c('Retnlb', 'Mmp8', 'Retnlg', 'Rsad2', 'Ifit3', 'Ifit1', 
+                     'Cxcl10', 'Stat1', 'Irf7', 'Cxcl3', 'Tgm2', 'Cd14', 'Cass4', 
+                     'Xbp1', 'Pald1', 'Exoc4', 'Gpnmb', 'Ccl3', 'Cstb', 'Ctsb', 'Cd63',
+                     'Irak2', 'Ngp', 'Adamdec1', 'Chil3', 'Ctsc', 'Fcnb')
+DotPlot(neutro, assay = "integratedSCT_", features  = markers.to.plot)
+ggsave('Zillionis_dot.png', width = 8.5, height = 7)

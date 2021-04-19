@@ -369,6 +369,9 @@ combined <- FindMultiModalNeighbors(
 
 resolution.range <- seq(from = 0, to = 2.0, by = 0.1)
 
+# MATTER TO RUN UMAP FIRST? this is what they do in vignette
+# combined <- RunUMAP(combined, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+
 # Find clusters using a range of resolutions
 combined <- FindClusters(object = combined, graph.name = "wsnn",
                          reduction.name = "wnn.umap", algorithm = 3, 
@@ -622,7 +625,219 @@ write.csv(t1, file = "t1.csv", row.names = F)
 write.csv(t2, file = "t2.csv", row.names = T)
 write.csv(t3, file = "t3.csv", row.names = F)
 
-# Clean Up Plots  ---------------------------
+rm(p, p4, p5, p6)
+
+saveRDS(combined, 'combined_04192021.rds')
+
+# Neutrophil (N) Subclustering  ---------------------------
+Idents(combined) <- 'celltype'
+neutro <- subset(combined, 
+                 idents = c('N 1', 'N 2', 'N 3', 'N 4', 'N 5', 'N 6'))
+
+DefaultAssay(neutro) <- 'RNA'
+neutro <- DietSeurat(neutro, assays = c("RNA", "ADT"))
+dim(neutro)
+
+# Confirm subsetted metadata
+table(neutro@meta.data$seurat_clusters)
+
+# split data to rerun workflow
+seurat_list <- SplitObject(neutro, split.by = "orig.ident")
+
+# Rerun analysis on subsetted data:
+for (i in 1:length(x = seurat_list)){
+  sample_id <- names(seurat_list)[[i]]
+  print(sample_id)
+  
+  seurat_list[[i]] <- SCTransform(seurat_list[[i]],
+                                  method = "glmGamPoi",
+                                  vars.to.regress = "percent.mt",
+                                  variable.features.n = 4000,
+                                  verbose = TRUE)
+}
+
+# > N Cycle Scoring ---------------------------
+# g2m_genes <- readRDS('g2m_genes.rds')
+# s_genes <- readRDS('s_genes.rds')
+# for (i in 1:length(x = seurat_list)){ # I can move this into the above for loop...
+#   seurat_list[[i]] <- CellCycleScoring(seurat_list[[i]], g2m.features=g2m_genes, s.features=s_genes)
+# }
+
+# > N SCT Integration ---------------------------
+# NOTE TO SELF_NEED TO MAKE SURE Cd3e, Cd3d, Cd4, Cd8a, Cd8b1 are included!
+features <- SelectIntegrationFeatures(object.list = seurat_list, 
+                                      nfeatures = 3000 , verbose = TRUE)
+seurat_list <- PrepSCTIntegration(object.list = seurat_list, 
+                                  anchor.features = features, verbose = TRUE)
+anchors <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30,
+                                  anchor.features = features,
+                                  normalization.method = "SCT")
+# Integrate 6000 genes, but only use the anchors from the 3000 as anchorset
+
+save.image(file='neutro_pre_int04192021.RData')
+
+to_integrate <- SelectIntegrationFeatures(object.list = seurat_list, 
+                                          nfeatures = 6000 , verbose = TRUE,
+                                          new.assay.name = "integratedSCT_")
+rm(seurat_list)
+
+neutro <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
+                        features.to.integrate = to_integrate, verbose = T)
+#saveRDS(neutro, file = "neutro_sct_integrated.rds")
+
+# > N Regress out S and G2M scores ---------------------------
+# This will take some time. 
+neutro <- ScaleData(neutro, vars.to.regress = c("S.Score", "G2M.Score"))
+
+# > N ADT Integration ---------------------------
+seurat_list <- anchors@object.list
+
+for (i in 1:length(x = seurat_list)){
+  DefaultAssay(seurat_list[[i]]) = "ADT"
+  VariableFeatures(seurat_list[[i]]) <- rownames(seurat_list[[i]][["ADT"]]) #select all ADT as variable features
+  # DSB ALREADY NORMALIZED
+  # seurat_list[[i]] <- NormalizeData(seurat_list[[i]], normalization.method = 'CLR', margin = 2) #CLR normalization for ADT
+}
+
+# Finding integration anchors for ADT
+anchorsADT <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30) # may need to alter dims
+neutroADT <- IntegrateData(anchorset = anchorsADT, dims = 1:30, new.assay.name = "integratedADT_")
+
+#I am not sure if this is a good idea:
+neutro[["integratedADT_"]] <- neutroADT[["integratedADT_"]] 
+
+rm(neutroADT, anchorsADT, anchors, seurat_list)
+saveRDS(neutro, "neutro_integrated.rds")
+
+neutro[['integratedSCT_']] <- neutro[['integrated']]
+
+# > N Select PCs ---------------------------
+DefaultAssay(neutro) <- "integratedSCT_"
+all.genes <- rownames(neutro)
+neutro <- ScaleData(neutro, features = all.genes)
+neutro <- RunPCA(neutro, verbose = T)
+ElbowPlot(neutro, ndims = 50, reduction = 'pca') # will use 40 because SCT is more accurate 
+ggsave("neutro_elbow_plot_sct_dsb120clean.png")
+
+# aPCA on ADT
+DefaultAssay(neutro) <- 'integratedADT_'
+neutro <- ScaleData(neutro)
+neutro <- RunPCA(neutro, reduction.name = 'apca')
+ElbowPlot(neutro, ndims = 30, reduction = "apca") # true dimensionality ~13, may be low
+ggsave("neutro_elbow_plot_dsb120clean.png")
+
+#Idents(neutro) <- "old.ident"
+neutro <- RunUMAP(neutro, reduction = 'pca', dims = 1:30, 
+                  assay = 'integratedSCT_', 
+                  reduction.name = 'sct.umap', reduction.key = 'sctUMAP_')
+neutro <- RunUMAP(neutro, reduction = 'apca', dims = 1:10, 
+                  assay = 'integratedADT_', 
+                  reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
+
+neutro <- FindNeighbors(neutro, reduction = 'pca', dims = 1:30, 
+                          graph.name = 'sct.snn')
+neutro <- FindClusters(neutro, graph.name = 'sct.snn', resolution = 1.0, verbose = T)
+
+neutro <- FindNeighbors(neutro, reduction = 'apca', dims = 1:10,
+                          graph.name = 'adt.snn')
+neutro <- FindClusters(neutro, graph.name = 'adt.snn', resolution = 1.0, verbose = T)
+
+Idents(neutro) <- 'sct.snn_res.1'
+p1 <- DimPlot(neutro, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+Idents(neutro) <- 'adt.snn_res.1'
+p2 <- DimPlot(neutro, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_neutro.png", width = 10, height = 5)
+
+# Using original labels from combined.rds
+Idents(neutro) <- 'old.ident'
+p1 <- DimPlot(neutro, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p2 <- DimPlot(neutro, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_neutro_origlabel.png", width = 10, height = 5)
+
+# > N WNN clustering ---------------------------
+# On the integrated SCT and integrated ADT data
+# Identify multimodal neighbors:
+
+neutro <- FindMultiModalNeighbors(
+  neutro, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:10), modality.weight.name = "SCT.weight")
+
+resolution.range <- seq(from = 0, to = 1.0, by = 0.1)
+
+# WNN - Find clusters using a range of resolutions
+neutro <- FindClusters(object = neutro, graph.name = "wsnn",
+                         reduction.name = "wnn.umap", algorithm = 3, 
+                         resolution = resolution.range, verbose = T)
+
+for (res in resolution.range){
+  md <- paste("wsnn_res.", res, sep = "")
+  Idents(neutro) <- md
+  p <- DimPlot(neutro, label = T, repel = T, label.size = 3) + NoLegend()
+  ggsave(paste("neutro_dimplot_", "res_", res, ".png", sep = ""), plot = p,
+         width = 5, height = 5)
+}
+
+# Plotting
+library(clustree)
+clustree(neutro, prefix = "wsnn_res.")
+ggsave("clustree_output_neutro_WNN.pdf", width = 9.5, height = 11)
+
+# neutro <- RunUMAP(neutro, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+# res <- 1.5
+# neutro <- FindClusters(neutro, graph.name = "wsnn", algorithm = 3, resolution = res, verbose = FALSE)
+# 
+# # Data visualization:
+# DimPlot(neutro, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 4) + NoLegend()
+# ggsave(paste("dimplot_", "res_", res, "neutro.png", sep = ""), width = 5, height = 5)
+
+# > N SCT clustering  ---------------------------
+# WNN CLUSTERING IS UNSTABLE - USING SCT CLUSTERING ONLY FOR NEUTROPHILS
+
+resolution.range <- seq(from = 0, to = 1.5, by = 0.1)
+
+# SCT - Find clusters using a range of resolutions
+neutro <- FindClusters(object = neutro, graph.name = "sct.snn",
+                       resolution = resolution.range, verbose = T)
+
+for (res in resolution.range){
+  md <- paste("sct.snn_res.", res, sep = "")
+  Idents(neutro) <- md
+  p <- DimPlot(neutro, label = T, repel = T, label.size = 3, 
+               reduction = 'sct.umap') + NoLegend()
+  ggsave(paste("neutro_dimplot_sct_", "res_", res, ".png", sep = ""), plot = p,
+         width = 5, height = 5)
+}
+
+# Plotting
+library(clustree)
+clustree(neutro, prefix = "sct.snn_res.")
+ggsave("clustree_output_neutro_WNN.pdf", width = 9.5, height = 11)
+
+neutro <- FindClusters(neutro, graph.name = "sct.snn",
+                       resolution = 0.5, verbose = T)
+
+# try a 3D plot: 
+# run 3D_UMAP_plots.R
+
+# > N markers  ---------------------------
+
+
+
+# DEGs by Treatment  ---------------------------
+
+
+## TEST
+# modify this later and see if I can make this rearrangement for orig.ident
+SeuratObject$stim <- factor(SeuratObject$stim, levels = c("Young", "Adult", "Old"))
+DimPlot(SeuratObject, split.by = "stim")
+
+
 # Create metadata colum for celltype + treatment condition
 combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
 Idents(combined) <- "celltype.trt"
