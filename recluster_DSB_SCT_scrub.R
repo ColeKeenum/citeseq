@@ -29,8 +29,8 @@ plan("multicore")
 # Load Data  ---------------------------
 
 # new PC-based QC
-# setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
-setwd("C:/Users/UPDATE/Desktop/COVID Lung CITE-Seq")
+setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
+# setwd("C:/Users/UPDATE/Desktop/COVID Lung CITE-Seq")
 
 # seuratObj <- readRDS("seuratObj_RNA_ADT.rds")
 seuratObj <- readRDS("seuratObj_scrub_mtQC_adtQC.rds")
@@ -448,48 +448,6 @@ FeaturePlot(combined, features = c('Cd209a', 'Itgae'), reduction = 'wnn.umap')
 
 # Celltype Identification ---------------------------
 # Run that script
-
-################################################################################
-# Cell cluster identification
-
-# I am unsure if I need to scale ALL RNA values for visualization...
-
-
-
-# find markers for every cluster compared to all remaining cells, report only the positive ones
-DefaultAssay(combined) <- "integratedSCT_"
-combined.markers <- FindAllMarkers(combined, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-write.csv(combined.markers, file = "combined.markers.csv")
-
-markers.10 <- FindAllMarkers(combined, ident = 10, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-# top gene
-VlnPlot(combined, features = c("Epas1")) + NoLegend()
-
-markers.27 <- FindMarkers(combined, ident.1 = 27, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
-# Obviously high expression of hemoglobin genes
-VlnPlot(combined, features = c("Hbb-bs")) + NoLegend()
-VlnPlot(combined, features = c("Npr3")) + NoLegend()
-VlnPlot(combined, features = c("Emp1")) + NoLegend()
-VlnPlot(combined, features = c("Sparc")) + NoLegend()
-VlnPlot(combined, features = c("percent.mt")) + NoLegend()
-# these cells might be more stressed
-
-# calling 27 AT2 cells, debatable
-
-# gamma delta T cells - from Alex
-VlnPlot(combined, assay = "integratedADT_", features = c("CD4-TotalA")) #neg. for nuocyte
-VlnPlot(combined, assay = "integratedADT_", features = c("CD8a-TotalA")) #neg. for nuocyte
-VlnPlot(combined, assay = "integratedADT_", features = c("CD69-TotalA")) # pos. for nuocyte
-VlnPlot(combined, assay = "integratedADT_", features = c("CD103-TotalA")) #neg. for nuocyte
-
-# Endothelial markers from Niethamer et al. 2020 eLife
-# pan-endothelial markers: CD31+/CD45-
-
-DefaultAssay(combined) <- "integratedSCT_"
-FeaturePlot(combined, features = c("Pecam1", "Ptprc"), reduction = "wnn.umap")
-DefaultAssay(combined) <- "integratedADT_"
-FeaturePlot(combined, features = c("CD31-TotalA", "CD45-TotalA"))
-
 
 # Marker Genes ---------------------------
 ## Exporting top 10 marker genes:
