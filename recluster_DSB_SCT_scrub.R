@@ -476,144 +476,163 @@ write.csv(top10, file = "adt_combined_cluster_biomarkers_unlab_top10.csv", row.n
 # ggsave("top5_markers_heatmap_unlab.png", plot = p, width = 10, height = 6)
 
 saveRDS(combined, 'combined_04182021.rds')
+# combined <- readRDS('combined_04182021.rds')
 
-################################################################################
+# Rename Idents ---------------------------
 # Saving old labels:
 combined[["old.ident"]] <- Idents(object = combined)
 
+# N = Neutrophil, T = T cell, B = B cell, gCap = gCap Endothelial, 
+# AM = Alveolar Macrophage, IM = Intersitial Macro, Vein = Vein Endo,
+# Macro = UNKNOWN CURRENTLY MACROPHAGE
+
 # Renaming:
 combined <- RenameIdents(object = combined, 
-                         '0' = "Eosinophils", 
-                         '1' = "Eosinophils", 
-                         '2' = "gCap Endothelial",
-                         '3' = "gCap Endothelial",
-                         '4' = "B Cells",
-                         '5' = "CD4+ T",
-                         '6' = "Alveolar Macro",
-                         '7' = "Alveolar Macro",
-                         '8' = "AT2",
-                         '9' = "NK Cells",
-                         '10' = "gCap Endothelial",
-                         '11' = "Neutrophils",
-                         '12' = "Activated CD4+ T",
-                         '13' = "Classical Mono",
-                         '14' = "Eosinophils",
-                         '15' = "Non-classical Mono",
-                         '16' = "Lipo Fibroblasts",
-                         '17' = "CD8+ T",
-                         '18' = "CD103+ DC",
-                         '19' = "Interstitial Macro",
-                         '20' = "Myofibroblasts",
-                         '21' = "aCap Endothelial",
-                         '22' = "Ebf1+ Fibroblasts",
-                         '23' = "Nuocytes",
-                         '24' = "Eosinophils",
-                         '25' = "AT2",
-                         '26' = "Vein Endothelial",
-                         '27' = "AT2",
-                         '28' = "CD8+ T",
-                         '29' = "Lipo Fibroblasts",
-                         '30' = "Non-classical Mono",
-                         '31' = "AT1",
-                         '32' = "B Cells",
-                         '33' = "Eosinophils",
-                         '34' = "Myeloid Cells",
-                         '35' = "CD4+ T",
-                         '36' = "Vein Endothelial",
-                         '37' = "Eosinophils",
-                         '38' = "AT1",
-                         '39' = "CD209+ DC",
-                         '40' = "Lipo Fibroblasts",
-                         '41' = "Alveolar Macro",
-                         '42' = "CD4+ T cells",
-                         '43' = "Lipo Fibroblasts",
-                         '44' = "Alveolar Macro",
-                         '45' = "Alveolar Macro",
-                         '46' = "Activated CD4+ T",
-                         '47' = "NK Cells",
-                         '48' = "B Cells",
-                         '49' = "Lymphatic Fibroblasts",
-                         '50' = "CD4+ T",
-                         '51' = "CD4+ T",
-                         '52' = "Ciliated Cells",
-                         '53' = "B Cells")
-p4 <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 5) + NoLegend()
-p4
+                         '0' = "N 1", 
+                         '1' = "N 2", 
+                         '2' = "gCap 1",
+                         '3' = "gCap 2",
+                         '4' = "B 1",
+                         '5' = "AM 1",
+                         '6' = "AT2 1",
+                         '7' = "gCap 3",
+                         '8' = "CD4 T 1",
+                         '9' = "NK",
+                         '10' = "N 3",
+                         '11' = "AM 2",
+                         '12' = "C Mono",
+                         '13' = "CD4 T 2",
+                         '14' = "CD8 T",
+                         '15' = "Myofib",
+                         '16' = "NC Mono ",
+                         '17' = "Lipofib 1",
+                         '18' = "AT1",
+                         '19' = "N 4",
+                         '20' = "N 5",
+                         '21' = "IM",
+                         '22' = "CD4 T 3",
+                         '23' = "aCap",
+                         '24' = "cDC 1",
+                         '25' = "Nuocyte",
+                         '26' = "B 2",
+                         '27' = "Efb1 Fib",
+                         '28' = "Treg",
+                         '29' = "CD4 T 4",
+                         '30' = "AM 3",
+                         '31' = "Vein",
+                         '32' = "Baso",
+                         '33' = "Macro",
+                         '34' = "pDC",
+                         '35' = "AM 4",
+                         '36' = "Lipofib 2",
+                         '37' = "N 6",
+                         '38' = "AT2 2",
+                         '39' = "Lymph Fib",
+                         '40' = "B 3",
+                         '41' = "AM 5",
+                         '42' = "cDC 2",
+                         '43' = "Clara",
+                         '44' = "Mtx Fib")
+combined[["celltype"]] <- Idents(combined)
+# p4 <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 5) + NoLegend()
+# p4
 
-#### For Grant:
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+ggsave("umap_res1.5_lab6.png", height = 6, width = 6)
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_res1.5_lab_clean.png", height = 5, width = 5)
 
-p4 <- DimPlot(combined, reduction = 'wnn.umap', label = FALSE, repel = TRUE, pt.size = 0.1)+ 
+# define a function that gets the colors of the clean UMAP
+get_colors <- function(p, obj){
+  # Formatting a vector of colors for DittoSeq plot coloring
+  colors <- ggplot_build(p)$data[[1]]$colour
+  unique_colors <- unique(colors)
+  color_freq <- 1:length(unique_colors)
+  for (i in 1:length(unique_colors)){
+    color <- unique_colors[[i]]
+    color_freq[[i]] <- length(grep(color, colors))
+  }
+  color_freq_desc <- sort(color_freq, decreasing = T)
+  color_names_by_freq <- as.character(1:length(color_freq))
+  for (i in 1:length(color_freq_desc)){
+    color_count <- color_freq_desc[[i]]
+    idx <- which(color_count == color_freq)
+    color_names_by_freq[[i]] <- unique_colors[[idx]]
+  }
+  
+  t3 <- table(obj@active.ident)
+  #write.csv(t2, file = "t3.csv")
+  
+  cell_df <- as.data.frame(t3)
+  color_df <- cbind(data.frame(unique_colors), data.frame(color_freq))
+  color_df <- merge(cell_df, color_df, by.x = "Freq", by.y = "color_freq")
+  colnames(color_df) <- c("Freq", "Celltype", "Color")
+  color_df <- color_df[order(tolower(color_df$Celltype)),]
+  
+  return(color_df)
+}
+
+color_df <- get_colors(p, combined)
+
+# plotting 100% stacked bar chart for cell type distribution by group:
+p <- dittoBarPlot(object = combined, var = combined@active.ident, group.by = "orig.ident",
+                  scale = c('percent'), color.panel = color_df$Color, 
+                  x.labels.rotate = F, ylab = 'Fraction of Cells')
+p$data$grouping <- factor(x = p$data$grouping, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+p + theme(axis.title.x=element_blank())
+ggsave("celltype_distribution_by_trt_leg.png", width = 6, height = 4.2)
+p + NoLegend()
+ggsave("celltype_distribution_by_trt_noLeg.png", width = 4.2, height = 4.2)
+
+# Clusters with Legend
+p <- DimPlot(combined, reduction = 'wnn.umap', label = FALSE, repel = TRUE, pt.size = 0.1)+ 
   theme(text = element_text(size=8, family = "sans"),  
         axis.title=element_text(size=8,family = "sans", face="bold"))
+ggsave("rawClusters.png", plot = p, width = 5, height = 4)
 
-filename <- "rawClusters.png"
-ggsave(filename = filename, plot = p4, width = 5, height = 4)
+# Dimplot Split by Treatment
+p <- DimPlot(combined, reduction = 'wnn.umap', split.by = "orig.ident") + NoLegend()
+# change order in plot: 
+p$data$orig.ident <- factor(x = p$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+p
+ggsave("dimplot_splitby_trt.png", plot = p, width = 15, height = 5)
 
+# Cluster by Group
 p5 <- DimPlot(combined, reduction = 'wnn.umap', group.by = "orig.ident") + 
   ggtitle(NULL) + NoLegend() + 
   theme(text = element_text(size=8, family = "sans"),  
         axis.title=element_text(size=8,family = "sans", face="bold"))
-
-filename <- "clusterByGroup.png"
-ggsave(filename = filename, plot = p5, width = 3, height = 3)
-
-p6 <- DimPlot(combined, reduction = 'wnn.umap', split.by = "orig.ident") + NoLegend()
-# change order in plot: 
-p6$data$orig.ident <- factor(x = p6$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
-p6
-
-# plotting 100% stacked bar chart for cell type distribution by group:
-p7 <- dittoBarPlot(object = combined, var = combined@active.ident, group.by = "orig.ident")
-p7$data$grouping <- factor(x = p7$data$grouping, levels = c("naive", "p4", "mp4", "p24", "mp24"))
-p7
+ggsave("clusterByGroup.png", plot = p5, width = 5, height = 5)
 
 # Tables:
 # number of cells per treatment
 t1 <- table(combined$orig.ident)
 # number of cells per type per treatment
 t2 <- table(combined$celltype, col.names = combined$orig.ident)
+col_order <- c('naive', 'p4', 'mp4', 'p24', 'mp24')
+t2 <- t2[ ,col_order]
 # number of cells per cluster
 t3 <- table(combined@active.ident)
 
-write.csv(t1, file = "t1.csv")
-write.csv(t2, file = "t2.csv")
-write.csv(t3, file = "t3.csv")
+write.csv(t1, file = "t1.csv", row.names = F)
+write.csv(t2, file = "t2.csv", row.names = T)
+write.csv(t3, file = "t3.csv", row.names = F)
 
-###############################################################################
-# Getting DEGs for endothelial/epithelial/fibroblasts relative to naive:
+# Clean Up Plots  ---------------------------
 # Create metadata colum for celltype + treatment condition
 combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
-combined$celltype <- Idents(combined)
 Idents(combined) <- "celltype.trt"
 
-DefaultAssay(combined) <- "RNA" # you definitely dont want to do this on integratedSCT_
-
 # DEGs will be calculated relative to naive
-DefaultAssay(combined) <- "RNA" 
-cellList <- list("Ebf1+ Fibroblasts",
-                 "Myofibroblasts",
-                 "Lipo Fibroblasts",
-                 "Lymphatic Fibroblasts",
-                 "aCap Endothelial",
-                 "Vein Endothelial",
-                 "gCap Endothelial",
-                 "AT1",
-                 "AT2",
-                 "Myeloid Cells",
-                 "Neutrophils",
-                 "Eosinophils",
-                 "Alveolar Macro",
-                 "Interstitial Macro",
-                 "CD103+ DC",
-                 "Classical Mono",
-                 "Non-classical Mono")
+DefaultAssay(combined) <- "SCT" # you definitely dont want to do this on integratedSCT_
+cellList <- rownames(t2)
 
-# cellList <- list("Lipo Fibroblasts",
-#                  "gCap Endothelial",
-#                  "AT1",
-#                  "Neutrophils",
-#                  "CD103+ DC", 
-#                  "Alveolar Macro")
+# TEST
+cellList <- list('N 1')
 
 trtList <- list("p4", "mp4", "p24", "mp24")
 
@@ -650,7 +669,6 @@ for (i in 1:length(x = cellList)){
       degList[[(i-1)*4+j]]$delabel[degList[[(i-1)*4+j]]$diffexpressed != "NO"] <- degList[[(i-1)*4+j]]$gene_symbol[degList[[(i-1)*4+j]]$diffexpressed != "NO"]
       # plotting
       
-      
       graphList[[(i-1)*4+j]] <- ggplot(data=degList[[(i-1)*4+j]], aes(x=avg_log2FC, y=-log10(p_val), col=diffexpressed, label=delabel)) +
         geom_point(size = 0.4) +
         theme_classic() +
@@ -664,10 +682,8 @@ for (i in 1:length(x = cellList)){
   }
 }
 
-saveRDS(degList, file = "2021-02-12 big.degList.rds")
-saveRDS(graphList, file = "2021-02-12 big.degList.rds")
-
-#degList <- readRDS("grant.v2.graphList.rds")
+#saveRDS(degList, file = "test.degList.rds")
+#saveRDS(graphList, file = "test.degList.rds")
 
 # Saving plots as png:
 for (i in 1:length(x = graphList)){
@@ -680,7 +696,7 @@ for (i in 1:length(x = graphList)){
 }
 
 degList <- do.call(rbind, degList)
-write.csv(degList, file = "2021-02-12 DEGs for Epithelial, Endo, Fibroblast, and Myeloid-Derived Cells.csv")
+write.csv(degList, file = "2021-04-19 DEGs.csv")
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
