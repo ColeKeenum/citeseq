@@ -611,6 +611,11 @@ p5 <- DimPlot(combined, reduction = 'wnn.umap', group.by = "orig.ident") +
         axis.title=element_text(size=8,family = "sans", face="bold"))
 ggsave("clusterByGroup.png", plot = p5, width = 5, height = 5)
 
+# rearrange orig.ident
+combined$orig.ident <- factor(combined$orig.ident, 
+                              levels = c('naive', 'p4', 'mp4', 'p24', 'mp24'))
+DimPlot(combined, split.by = "orig.ident") + NoLegend() # works
+
 # Tables:
 # number of cells per treatment
 t1 <- table(combined$orig.ident)
@@ -628,6 +633,7 @@ write.csv(t3, file = "t3.csv", row.names = F)
 rm(p, p4, p5, p6)
 
 saveRDS(combined, 'combined_04192021.rds')
+# combined <- readRDS('combined_04192021.rds')
 
 # Neutrophil (N) Subclustering  ---------------------------
 Idents(combined) <- 'celltype'
@@ -824,19 +830,9 @@ neutro <- FindClusters(neutro, graph.name = "sct.snn",
 
 # try a 3D plot: 
 # run 3D_UMAP_plots.R
-
-# > N markers  ---------------------------
-
-
+# run clustering part of citeseq_cell_markers.R script
 
 # DEGs by Treatment  ---------------------------
-
-
-## TEST
-# modify this later and see if I can make this rearrangement for orig.ident
-SeuratObject$stim <- factor(SeuratObject$stim, levels = c("Young", "Adult", "Old"))
-DimPlot(SeuratObject, split.by = "stim")
-
 
 # Create metadata colum for celltype + treatment condition
 combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
@@ -844,10 +840,7 @@ Idents(combined) <- "celltype.trt"
 
 # DEGs will be calculated relative to naive
 DefaultAssay(combined) <- "SCT" # you definitely dont want to do this on integratedSCT_
-cellList <- rownames(t2)
-
-# TEST
-cellList <- list('N 1')
+cellList <- unique(combined$celltype)
 
 trtList <- list("p4", "mp4", "p24", "mp24")
 
@@ -897,8 +890,8 @@ for (i in 1:length(x = cellList)){
   }
 }
 
-#saveRDS(degList, file = "test.degList.rds")
-#saveRDS(graphList, file = "test.degList.rds")
+saveRDS(degList, file = "test.degList.naive.rds")
+saveRDS(graphList, file = "test.degList.naive.rds")
 
 # Saving plots as png:
 for (i in 1:length(x = graphList)){
