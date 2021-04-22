@@ -952,11 +952,11 @@ struct <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
                         new.assay.name = 'integratedSCT_', verbose = T)
 saveRDS(struct, file = "struct_sct_integrated.rds")
 
-# > N Regress out S and G2M scores ---------------------------
+# > Struct Regress out S and G2M scores ---------------------------
 # This will take some time. 
 struct <- ScaleData(struct, vars.to.regress = c("S.Score", "G2M.Score"))
 
-# > N ADT Integration ---------------------------
+# > Struct ADT Integration ---------------------------
 seurat_list <- anchors@object.list
 
 for (i in 1:length(x = seurat_list)){
@@ -975,15 +975,14 @@ struct[["integratedADT_"]] <- structADT[["integratedADT_"]]
 
 rm(structADT, anchorsADT, anchors, seurat_list)
 saveRDS(struct, "struct_integrated.rds")
+# struct <- readRDS("struct_integrated.rds")
 
-struct[['integratedSCT_']] <- struct[['integrated']]
-
-# > N Select PCs ---------------------------
+# > Struct Select PCs ---------------------------
 DefaultAssay(struct) <- "integratedSCT_"
 all.genes <- rownames(struct)
 struct <- ScaleData(struct, features = all.genes)
 struct <- RunPCA(struct, verbose = T)
-ElbowPlot(struct, ndims = 50, reduction = 'pca') # will use 40 because SCT is more accurate 
+ElbowPlot(struct, ndims = 50, reduction = 'pca') # will use 30 because SCT is more accurate 
 ggsave("struct_elbow_plot_sct_dsb120clean.png")
 
 # aPCA on ADT
@@ -1019,7 +1018,7 @@ p1 + p2
 ggsave("SCT_or_ADT_only_clustering_struct.png", width = 10, height = 5)
 
 # Using original labels from combined.rds
-Idents(struct) <- 'old.ident'
+Idents(struct) <- 'celltype'
 p1 <- DimPlot(struct, reduction = 'sct.umap', label = TRUE,
               repel = TRUE, label.size = 2.5) + NoLegend()
 p2 <- DimPlot(struct, reduction = 'adt.umap', label = TRUE,
@@ -1027,7 +1026,7 @@ p2 <- DimPlot(struct, reduction = 'adt.umap', label = TRUE,
 p1 + p2
 ggsave("SCT_or_ADT_only_clustering_struct_origlabel.png", width = 10, height = 5)
 
-# > N WNN clustering ---------------------------
+# > Struct WNN clustering ---------------------------
 # On the integrated SCT and integrated ADT data
 # Identify multimodal neighbors:
 
@@ -1035,7 +1034,9 @@ struct <- FindMultiModalNeighbors(
   struct, reduction.list = list("pca", "apca"), 
   dims.list = list(1:30, 1:10), modality.weight.name = "SCT.weight")
 
-resolution.range <- seq(from = 0, to = 1.0, by = 0.1)
+struct <- RunUMAP(struct, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+
+resolution.range <- seq(from = 0, to = 2.0, by = 0.1)
 
 # WNN - Find clusters using a range of resolutions
 struct <- FindClusters(object = struct, graph.name = "wsnn",
@@ -1045,7 +1046,7 @@ struct <- FindClusters(object = struct, graph.name = "wsnn",
 for (res in resolution.range){
   md <- paste("wsnn_res.", res, sep = "")
   Idents(struct) <- md
-  p <- DimPlot(struct, label = T, repel = T, label.size = 3) + NoLegend()
+  p <- DimPlot(struct, label = T, repel = T, label.size = 3, reduction = 'wnn.umap') + NoLegend()
   ggsave(paste("struct_dimplot_", "res_", res, ".png", sep = ""), plot = p,
          width = 5, height = 5)
 }
@@ -1063,10 +1064,10 @@ ggsave("clustree_output_struct_WNN.pdf", width = 9.5, height = 11)
 # DimPlot(struct, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 4) + NoLegend()
 # ggsave(paste("dimplot_", "res_", res, "struct.png", sep = ""), width = 5, height = 5)
 
-# > N SCT clustering  ---------------------------
+# > Struct SCT clustering  ---------------------------
 # WNN CLUSTERING IS UNSTABLE - USING SCT CLUSTERING ONLY FOR structPHILS
 
-resolution.range <- seq(from = 0, to = 1.5, by = 0.1)
+resolution.range <- seq(from = 0, to = 1.0, by = 0.1)
 
 # SCT - Find clusters using a range of resolutions
 struct <- FindClusters(object = struct, graph.name = "sct.snn",
@@ -1084,14 +1085,123 @@ for (res in resolution.range){
 # Plotting
 library(clustree)
 clustree(struct, prefix = "sct.snn_res.")
-ggsave("clustree_output_struct_WNN.pdf", width = 9.5, height = 11)
+ggsave("clustree_output_struct_SCT.pdf", width = 9.5, height = 11)
 
 struct <- FindClusters(struct, graph.name = "sct.snn",
-                       resolution = 0.5, verbose = T)
+                       resolution = 1.0, verbose = T)
 
-# try a 3D plot: 
-# run 3D_UMAP_plots.R
-# run clustering part of citeseq_cell_markers.R script
+# Calculate DEG markers  ---------------------------
+DefaultAssay(struct) <- "SCT"
+struct.markers <- FindAllMarkers(struct, only.pos = FALSE, 
+                                 min.pct = 0.1, logfc.threshold = 0.6, 
+                                 max.cells.per.ident = Inf)
+all.markers <- struct.markers %>% group_by(cluster)
+write.csv(all.markers, file = "struct_cluster_biomarkers_labeled.csv", row.names = FALSE)
+
+## Plotting top 5 marker genes on heatmap: 
+top5 <- struct.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+p <- DoHeatmap(subset(struct, downsample = 100),
+               features = top5$gene, size = 3, angle = 30) + NoLegend()
+ggsave("struct_top5_markers_heatmap_labeled.png", plot = p, width = 10, height = 6)
+
+# > Struct Gillich paper markers:   ---------------------------
+  
+  FeaturePlot(struct, features = 'doublet_score')
+FeaturePlot(struct, features = 'H2-Ab1')
+
+  # aCap -  (Same as Endothelial kdr high)
+  markers.to.plot <- c("Car4", "Ednrb", "Fibin", "Tbx2", "Cdkn2b", "Rprml", "Chst1", "Apln")
+  DotPlot(struct, assay = "integratedSCT_", features  = markers.to.plot)
+  ggsave('Gillich_aCap_struct.png', width = 8.5, height = 7)
+  
+  # gCap - 2 and 3 most strongly, 10 perhaps (debatable)
+  markers.to.plot <- c("Cd93", "Ptprb", "Plvap", "Gpihbp1", "H2-Ab1", "Tek", "Kit", "Aplnr")
+  DotPlot(struct, assay = "integratedSCT_", features  = markers.to.plot)
+  ggsave('Gillich_gCap_struct.png', width = 8.5, height = 7)
+  
+  # Artery - N/A
+  markers.to.plot <- c("Mgp", "Cdh13", "Htra1", "Bmx", "Gja5", "Fbln2", "Sulf1")
+  DotPlot(struct, assay = "integratedSCT_", features  = markers.to.plot)
+  ggsave('Gillich_artery_struct.png', width = 8.5, height = 7)
+  
+  # Vein - Same as endothelial cells Vwf hi, already labeled
+  markers.to.plot <- c("Vwf", "Slc6a2", "Bst1", "Car8", "Amigo2", "Mustin1", "Vegfc", "Csrp2", "Nr2f2")
+  DotPlot(struct, assay = "integratedSCT_", features  = markers.to.plot)
+  ggsave('Gillich_vein_endo_struct.png', width = 8.5, height = 7)
+  
+  # Lymphatics - Same as lymphatic fibroblasts, already labeled
+  markers.to.plot <- c("Mmrn1", "Fxyd6", "Reln", "Pdpn", "Thy1", "Nrp2", "Tbx1", "Gja1")
+  DotPlot(struct, assay = "integratedSCT_", features  = markers.to.plot)
+  ggsave('Gillich_lymphatics_struct.png', width = 8.5, height = 7)
+  
+  # Markers to define metaclusters
+  markers.to.plot <- c('Ptprc', 'Pecam1', 'Prox1', 'Hopx', 'Sftpc',
+                       'Trbc2', 'Ccl5', 'Retnlg', 'Mcpt8', 'Mcpt4', 'F13a1', 
+                       'Epcam', 'Cdh5', 'Col1a2', 'Scgb3a2', 'Foxj1', 'Enpp2', 
+                       'Mfap4', 'Ly6c2', "Akap5", "Lamp3", "Foxp3", 'Gpihbp1',
+                       'Col1a1', 'Acta2')
+  DefaultAssay(struct) <- "SCT"
+  for (marker in markers.to.plot){
+    FeaturePlot(struct, features = marker, reduction = 'sct.umap')
+    filename <- paste("FeaturePlot_", marker, "_struct.png", sep = "")
+    ggsave(filename = filename, width = 5, height = 5)
+  }
+  DefaultAssay(struct) <- "integratedSCT_"
+  
+struct <- RenameIdents(struct, 
+                       '0' = 'gCap',
+                       '1' = 'gCap',
+                       '2' = 'AT 2',
+                       '3' = 'gCap',
+                       '4' = 'gCap',
+                       '5' = 'AT 2',
+                       '6' = 'aCap',
+                       '7' = 'Myofib',
+                       '8' = 'gCap',
+                       '9' = 'gCap',
+                       '10' = 'Lipofib',
+                       '11' = 'Ebf1+ Fib',
+                       '12' = 'Alv Fib',
+                       '13' = 'AT 1',
+                       '14' = 'Vein',
+                       '15' = 'DOUBLET',
+                       '16' = 'AT 1',
+                       '17' = 'Adv Fib',
+                       '18' = 'gCap',
+                       '19' = 'AT 2',
+                       '20' = 'Lymph Fib')
+
+p <- DimPlot(struct, reduction = 'sct.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_labeled_struct_subcluster.png", height = 5, width = 5)
+
+rm(all.markers, p, p1, p2, struct.markers, top5)
+# > Struct apply to parent --------------------------- 
+
+combined <- readRDS('combined_04192021.rds')
+
+# Generate a new column called sub_cluster in the metadata
+combined$sub_cluster <- Idents(combined)
+Idents(combined) <- 'sub_cluster'
+combined <- SetIdent(combined, cells = Cells(struct), Idents(struct))
+combined$sub_cluster <- Idents(combined)
+
+DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
+        cells = Cells(struct), reduction = 'wnn.umap') + NoLegend()
+ggsave('struct_subcluster_onUMAP.png', height = 5, width = 5)
+
+DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
+        cells = Cells(struct), reduction = 'sct.umap') + NoLegend()
+ggsave('struct_subcluster_onUMAP_SCT_sketchy.png', height = 5, width = 5)
+
+combined$celltype <- combined$sub_cluster
+Idents(combined) <- 'celltype'
+
+saveRDS(combined, 'combined_04_22_2021.rds')
 
 # DEGs by Treatment  ---------------------------
 
