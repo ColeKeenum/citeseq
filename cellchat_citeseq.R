@@ -81,14 +81,16 @@ for (i in 1:nrow(mat)) {
   netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat), title.name = rownames(mat)[i])
 }
 
-# Emphasis on CXCL pathway  ---------------------------
+# > Emphasis on CXCL pathway  ---------------------------
 pathways.show <- c("CXCL") 
 
-# 
+pathways.show <- cellchat@netP$pathways
 
 # Hierarchy plot
 # Alveolar-side cells: AT1, AT2 (two types?), Alv. Macrophages.
 vertex.receiver = seq(2,9) # indices of intersted cells
+
+vertex.receiver = seq(34,35)
 netVisual_aggregate(cellchat, signaling = pathways.show,  vertex.receiver = vertex.receiver)
 
 # Circle plot
@@ -115,9 +117,9 @@ netVisual_chord_cell(cellchat, signaling = pathways.show, group = group.cellType
 netAnalysis_contribution(cellchat, signaling = pathways.show)
 
 pairLR.CXCL <- extractEnrichedLR(cellchat, signaling = pathways.show, geneLR.return = FALSE)
-LR.show <- pairLR.CXCL[1,] # show one ligand-receptor pair
+LR.show <- pairLR.CXCL[2,] # show one ligand-receptor pair
 # Hierarchy plot
-vertex.receiver = seq(1,4) # a numeric vector
+vertex.receiver = seq(2,9) # a numeric vector
 netVisual_individual(cellchat, signaling = pathways.show,  pairLR.use = LR.show, vertex.receiver = vertex.receiver)
 
 # Circle plot
@@ -133,7 +135,7 @@ netVisual_individual(cellchat, signaling = pathways.show, pairLR.use = LR.show, 
 pathways.show.all <- cellchat@netP$pathways
 # check the order of cell identity to set suitable vertex.receiver
 levels(cellchat@idents)
-vertex.receiver = seq(1,4)
+vertex.receiver = seq(2,9)
 for (i in 1:length(pathways.show.all)) {
   # Visualize communication network associated with both signaling pathway and individual L-R pairs
   netVisual(cellchat, signaling = pathways.show.all[i], vertex.receiver = vertex.receiver, layout = "hierarchy")
@@ -234,4 +236,236 @@ cellchat <- netClustering(cellchat, type = "functional")
 #> Classification learning of the signaling networks for a single dataset
 # Visualization in 2D-space
 netVisual_embedding(cellchat, type = "functional", label.size = 3.5)
+
+# MP4-hr ---------------------------
+data.input <- GetAssayData(object = seurat_list$mp4, assay = 'SCT', slot = "data")
+
+meta <- seurat_list$mp4@meta.data[c('celltype')]
+meta$celltype <- paste(meta$celltype) # sketchy, doing this to remove the levels
+
+# Create CellChat object
+cellchat <- createCellChat(object = data.input, meta = meta, group.by = "celltype")
+
+#cellchat <- addMeta(cellchat, meta = meta)
+cellchat <- setIdent(cellchat, ident.use = "celltype") # set "labels" as default cell identity
+levels(cellchat@idents) # show factor levels of the cell labels
+groupSize <- as.numeric(table(cellchat@idents)) # number of cells in each cell group
+
+# use CellChatDB.mouse if running on mouse data
+CellChatDB <- CellChatDB.mouse 
+showDatabaseCategory(CellChatDB)
+
+# Show the structure of the database
+dplyr::glimpse(CellChatDB$interaction)
+
+# > ALL signaling ---------------------------
+
+#CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling") # use Secreted Signaling
+CellChatDB.use <- CellChatDB # full CellChatDB
+
+cellchat@DB <- CellChatDB.use # set the used database in the object
+
+cellchat <- subsetData(cellchat) # subset the expression data of signaling genes for saving computation cost
+
+# this will take a little time
+cellchat <- identifyOverExpressedGenes(cellchat)
+cellchat <- identifyOverExpressedInteractions(cellchat)
+cellchat <- projectData(cellchat, PPI.mouse) # used to be be PPI.human
+
+# For later: consider using population.size = TRUE for probability computation
+# Consider setting raw.use = FALSE to alleviate the dropout issue
+cellchat <- computeCommunProb(cellchat, raw.use = FALSE)
+# Filter out the cell-cell communication if there are only few number of cells in certain cell groups
+cellchat <- filterCommunication(cellchat, min.cells = 10)
+
+# infer cell-cell communication at a signaling pathway level:
+cellchat <- computeCommunProbPathway(cellchat)
+
+# calculate the aggregated cell-cell communication network
+cellchat <- aggregateNet(cellchat)
+
+# visualize
+groupSize <- as.numeric(table(cellchat@idents))
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_circle(cellchat@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+netVisual_circle(cellchat@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+ggsave('net_test.pdf', width = 9.5, height = 11)
+
+# analyze signaling from each cell group
+mat <- cellchat@net$weight
+#par(mfrow = c(3,4), xpd=TRUE) # broke from me
+par(mar=c(1,1,1,1), xpd=TRUE) # worked for me
+for (i in 1:nrow(mat)) {
+  mat2 <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+  mat2[i, ] <- mat[i, ]
+  netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat), title.name = rownames(mat)[i])
+}
+
+# > Emphasis on CXCL pathway  ---------------------------
+pathways.show <- c("CXCL") 
+
+pathways.show <- c("CCL") 
+
+pathways.show <- cellchat@netP$pathways
+
+# Hierarchy plot
+# Alveolar-side cells: AT1, AT2 (two types?), Alv. Macrophages.
+vertex.receiver = seq(2,9) # indices of intersted cells
+
+vertex.receiver = seq(33,38)
+netVisual_aggregate(cellchat, signaling = pathways.show,  vertex.receiver = vertex.receiver)
+
+# Circle plot
+par(mfrow=c(1,1))
+netVisual_aggregate(cellchat, signaling = pathways.show, layout = "circle")
+
+# Chord diagram
+par(mfrow=c(1,1))
+netVisual_aggregate(cellchat, signaling = pathways.show, layout = "chord")
+#> Note: The first link end is drawn out of sector 'Inflam. FIB'.
+
+# Heatmap
+par(mfrow=c(1,1))
+netVisual_heatmap(cellchat, signaling = pathways.show, color.heatmap = "Reds")
+#> Do heatmap based on a single object
+
+# Chord diagram
+group.cellType <- c(rep("FIB", 4), rep("DC", 4), rep("TC", 4)) # grouping cell clusters into fibroblast, DC and TC cells
+names(group.cellType) <- levels(cellchat@idents)
+netVisual_chord_cell(cellchat, signaling = pathways.show, group = group.cellType, title.name = paste0(pathways.show, " signaling network"))
+#> Plot the aggregated cell-cell communication network at the signaling pathway level
+#> Note: The first link end is drawn out of sector 'Inflam. FIB'.
+
+netAnalysis_contribution(cellchat, signaling = pathways.show)
+
+pairLR.CXCL <- extractEnrichedLR(cellchat, signaling = pathways.show, geneLR.return = FALSE)
+LR.show <- pairLR.CXCL[2,] # show one ligand-receptor pair
+# Hierarchy plot
+vertex.receiver = seq(2,9) # a numeric vector
+netVisual_individual(cellchat, signaling = pathways.show,  pairLR.use = LR.show, vertex.receiver = vertex.receiver)
+
+# Circle plot
+netVisual_individual(cellchat, signaling = pathways.show, pairLR.use = LR.show, layout = "circle")
+
+#> [[1]]
+# Chord diagram
+netVisual_individual(cellchat, signaling = pathways.show, pairLR.use = LR.show, layout = "chord")
+#> Note: The first link end is drawn out of sector 'Inflam. FIB'.
+
+
+
+# MP24 ---------------------------
+data.input <- GetAssayData(object = seurat_list$mp24, assay = 'SCT', slot = "data")
+
+meta <- seurat_list$mp24@meta.data[c('celltype')]
+meta$celltype <- paste(meta$celltype) # sketchy, doing this to remove the levels
+
+# Create CellChat object
+cellchat <- createCellChat(object = data.input, meta = meta, group.by = "celltype")
+
+#cellchat <- addMeta(cellchat, meta = meta)
+cellchat <- setIdent(cellchat, ident.use = "celltype") # set "labels" as default cell identity
+levels(cellchat@idents) # show factor levels of the cell labels
+groupSize <- as.numeric(table(cellchat@idents)) # number of cells in each cell group
+
+# use CellChatDB.mouse if running on mouse data
+CellChatDB <- CellChatDB.mouse 
+showDatabaseCategory(CellChatDB)
+
+# Show the structure of the database
+dplyr::glimpse(CellChatDB$interaction)
+
+# > ALL signaling ---------------------------
+
+#CellChatDB.use <- subsetDB(CellChatDB, search = "Secreted Signaling") # use Secreted Signaling
+CellChatDB.use <- CellChatDB # full CellChatDB
+
+cellchat@DB <- CellChatDB.use # set the used database in the object
+
+cellchat <- subsetData(cellchat) # subset the expression data of signaling genes for saving computation cost
+
+# this will take a little time
+cellchat <- identifyOverExpressedGenes(cellchat)
+cellchat <- identifyOverExpressedInteractions(cellchat)
+cellchat <- projectData(cellchat, PPI.mouse) # used to be be PPI.human
+
+# For later: consider using population.size = TRUE for probability computation
+# Consider setting raw.use = FALSE to alleviate the dropout issue
+cellchat <- computeCommunProb(cellchat, raw.use = FALSE)
+# Filter out the cell-cell communication if there are only few number of cells in certain cell groups
+cellchat <- filterCommunication(cellchat, min.cells = 10)
+
+# infer cell-cell communication at a signaling pathway level:
+cellchat <- computeCommunProbPathway(cellchat)
+
+# calculate the aggregated cell-cell communication network
+cellchat <- aggregateNet(cellchat)
+
+# visualize
+groupSize <- as.numeric(table(cellchat@idents))
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_circle(cellchat@net$count, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Number of interactions")
+netVisual_circle(cellchat@net$weight, vertex.weight = groupSize, weight.scale = T, label.edge= F, title.name = "Interaction weights/strength")
+ggsave('net_test.pdf', width = 9.5, height = 11)
+
+# analyze signaling from each cell group
+mat <- cellchat@net$weight
+#par(mfrow = c(3,4), xpd=TRUE) # broke from me
+par(mar=c(1,1,1,1), xpd=TRUE) # worked for me
+for (i in 1:nrow(mat)) {
+  mat2 <- matrix(0, nrow = nrow(mat), ncol = ncol(mat), dimnames = dimnames(mat))
+  mat2[i, ] <- mat[i, ]
+  netVisual_circle(mat2, vertex.weight = groupSize, weight.scale = T, edge.weight.max = max(mat), title.name = rownames(mat)[i])
+}
+
+# > Emphasis on CXCL pathway  ---------------------------
+pathways.show <- c("CXCL") 
+
+pathways.show <- c("CCL") 
+
+pathways.show <- cellchat@netP$pathways
+
+# Hierarchy plot
+# Alveolar-side cells: AT1, AT2 (two types?), Alv. Macrophages.
+vertex.receiver = seq(2,9) # indices of intersted cells
+
+vertex.receiver = seq(33,38)
+netVisual_aggregate(cellchat, signaling = pathways.show,  vertex.receiver = vertex.receiver)
+
+# Circle plot
+par(mfrow=c(1,1))
+netVisual_aggregate(cellchat, signaling = pathways.show, layout = "circle")
+
+# Chord diagram
+par(mfrow=c(1,1))
+netVisual_aggregate(cellchat, signaling = pathways.show, layout = "chord")
+#> Note: The first link end is drawn out of sector 'Inflam. FIB'.
+
+# Heatmap
+par(mfrow=c(1,1))
+netVisual_heatmap(cellchat, signaling = pathways.show, color.heatmap = "Reds")
+#> Do heatmap based on a single object
+
+# Chord diagram
+group.cellType <- c(rep("FIB", 4), rep("DC", 4), rep("TC", 4)) # grouping cell clusters into fibroblast, DC and TC cells
+names(group.cellType) <- levels(cellchat@idents)
+netVisual_chord_cell(cellchat, signaling = pathways.show, group = group.cellType, title.name = paste0(pathways.show, " signaling network"))
+#> Plot the aggregated cell-cell communication network at the signaling pathway level
+#> Note: The first link end is drawn out of sector 'Inflam. FIB'.
+
+netAnalysis_contribution(cellchat, signaling = pathways.show)
+
+pairLR.CXCL <- extractEnrichedLR(cellchat, signaling = pathways.show, geneLR.return = FALSE)
+LR.show <- pairLR.CXCL[2,] # show one ligand-receptor pair
+# Hierarchy plot
+vertex.receiver = seq(2,9) # a numeric vector
+netVisual_individual(cellchat, signaling = pathways.show,  pairLR.use = LR.show, vertex.receiver = vertex.receiver)
+
+# Circle plot
+netVisual_individual(cellchat, signaling = pathways.show, pairLR.use = LR.show, layout = "circle")
+
+#> [[1]]
+# Chord diagram
+netVisual_individual(cellchat, signaling = pathways.show, pairLR.use = LR.show, layout = "chord")
+#> Note: The first link end is drawn out of sector 'Inflam. FIB'.
 

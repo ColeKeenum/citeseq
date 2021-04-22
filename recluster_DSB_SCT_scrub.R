@@ -635,6 +635,65 @@ rm(p, p4, p5, p6)
 saveRDS(combined, 'combined_04192021.rds')
 # combined <- readRDS('combined_04192021.rds')
 
+# Condensed Renaming  ---------------------------
+Idents(combined) <- 'old.ident'
+combined <- RenameIdents(object = combined, 
+                         '0' = "N B", 
+                         '1' = "N A", 
+                         '2' = "gCap 1",
+                         '3' = "gCap 2",
+                         '4' = "B 1",
+                         '5' = "AM 1",
+                         '6' = "AT2 1",
+                         '7' = "gCap 3",
+                         '8' = "CD4 T 1",
+                         '9' = "NK",
+                         '10' = "N C",
+                         '11' = "AM 2",
+                         '12' = "C Mono",
+                         '13' = "CD4 T 2",
+                         '14' = "CD8 T",
+                         '15' = "Myofib",
+                         '16' = "NC Mono ",
+                         '17' = "Lipofib 1",
+                         '18' = "AT1",
+                         '19' = "N C",
+                         '20' = "N A",
+                         '21' = "IM",
+                         '22' = "CD4 T 3",
+                         '23' = "aCap",
+                         '24' = "cDC 1",
+                         '25' = "Nuocyte",
+                         '26' = "B 2",
+                         '27' = "Efb1 Fib",
+                         '28' = "Treg",
+                         '29' = "CD4 T 4",
+                         '30' = "AM 3",
+                         '31' = "Vein",
+                         '32' = "Baso",
+                         '33' = "Macro",
+                         '34' = "pDC",
+                         '35' = "AM 4",
+                         '36' = "Lipofib 2",
+                         '37' = "N B",
+                         '38' = "AT2 2",
+                         '39' = "Lymph Fib",
+                         '40' = "B 3",
+                         '41' = "AM 5",
+                         '42' = "cDC 2",
+                         '43' = "Clara",
+                         '44' = "Mtx Fib")
+combined[["condensed"]] <- Idents(combined)
+
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+ggsave("umap_condensed.png", height = 6, width = 6)
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_condensed_clean.png", height = 5, width = 5)
+
 # Neutrophil (N) Subclustering  ---------------------------
 Idents(combined) <- 'celltype'
 neutro <- subset(combined, 
@@ -826,6 +885,208 @@ clustree(neutro, prefix = "sct.snn_res.")
 ggsave("clustree_output_neutro_WNN.pdf", width = 9.5, height = 11)
 
 neutro <- FindClusters(neutro, graph.name = "sct.snn",
+                       resolution = 0.5, verbose = T)
+
+# try a 3D plot: 
+# run 3D_UMAP_plots.R
+# run clustering part of citeseq_cell_markers.R script
+
+# Structural Cell Subclustering  ---------------------------
+# AKA Endothelial / Epithelial / Fibroblast
+Idents(combined) <- 'celltype'
+struct <- subset(combined, idents = c('Lymph Fib',
+                                      'Myofib',
+                                      'Lipofib 2',
+                                      'gCap 1',
+                                      'Vein',
+                                      'gCap 3',
+                                      'gCap 2',
+                                      'aCap',
+                                      'Lipofib 1',
+                                      'Efb1 Fib',
+                                      'Mtx Fib',
+                                      'AT1',
+                                      'AT2 2',
+                                      'AT2 1'))
+
+DefaultAssay(struct) <- 'RNA'
+struct <- DietSeurat(struct, assays = c("RNA", "ADT"))
+dim(struct)
+
+# Confirm subsetted metadata
+table(struct@meta.data$seurat_clusters)
+
+# split data to rerun workflow
+seurat_list <- SplitObject(struct, split.by = "orig.ident")
+
+# Rerun analysis on subsetted data:
+for (i in 1:length(x = seurat_list)){
+  sample_id <- names(seurat_list)[[i]]
+  print(sample_id)
+  
+  seurat_list[[i]] <- SCTransform(seurat_list[[i]],
+                                  method = "glmGamPoi",
+                                  vars.to.regress = "percent.mt",
+                                  variable.features.n = 4000,
+                                  verbose = TRUE)
+}
+
+# > Struct SCT Integration ---------------------------
+# NOTE TO SELF_NEED TO MAKE SURE Cd3e, Cd3d, Cd4, Cd8a, Cd8b1 are included!
+features <- SelectIntegrationFeatures(object.list = seurat_list, 
+                                      nfeatures = 3000 , verbose = TRUE)
+seurat_list <- PrepSCTIntegration(object.list = seurat_list, 
+                                  anchor.features = features, verbose = TRUE)
+anchors <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30,
+                                  anchor.features = features,
+                                  normalization.method = "SCT")
+
+# save.image(file='struct_pre_int04192021.RData')
+
+# to_integrate <- SelectIntegrationFeatures(object.list = seurat_list, 
+#                                           nfeatures = 6000 , verbose = TRUE,
+#                                           new.assay.name = "integratedSCT_")
+rm(seurat_list, combined)
+
+struct <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
+                        new.assay.name = 'integratedSCT_', verbose = T)
+saveRDS(struct, file = "struct_sct_integrated.rds")
+
+# > N Regress out S and G2M scores ---------------------------
+# This will take some time. 
+struct <- ScaleData(struct, vars.to.regress = c("S.Score", "G2M.Score"))
+
+# > N ADT Integration ---------------------------
+seurat_list <- anchors@object.list
+
+for (i in 1:length(x = seurat_list)){
+  DefaultAssay(seurat_list[[i]]) = "ADT"
+  VariableFeatures(seurat_list[[i]]) <- rownames(seurat_list[[i]][["ADT"]]) #select all ADT as variable features
+  # DSB ALREADY NORMALIZED
+  # seurat_list[[i]] <- NormalizeData(seurat_list[[i]], normalization.method = 'CLR', margin = 2) #CLR normalization for ADT
+}
+
+# Finding integration anchors for ADT
+anchorsADT <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30) # may need to alter dims
+structADT <- IntegrateData(anchorset = anchorsADT, dims = 1:30, new.assay.name = "integratedADT_")
+
+#I am not sure if this is a good idea:
+struct[["integratedADT_"]] <- structADT[["integratedADT_"]] 
+
+rm(structADT, anchorsADT, anchors, seurat_list)
+saveRDS(struct, "struct_integrated.rds")
+
+struct[['integratedSCT_']] <- struct[['integrated']]
+
+# > N Select PCs ---------------------------
+DefaultAssay(struct) <- "integratedSCT_"
+all.genes <- rownames(struct)
+struct <- ScaleData(struct, features = all.genes)
+struct <- RunPCA(struct, verbose = T)
+ElbowPlot(struct, ndims = 50, reduction = 'pca') # will use 40 because SCT is more accurate 
+ggsave("struct_elbow_plot_sct_dsb120clean.png")
+
+# aPCA on ADT
+DefaultAssay(struct) <- 'integratedADT_'
+struct <- ScaleData(struct)
+struct <- RunPCA(struct, reduction.name = 'apca')
+ElbowPlot(struct, ndims = 30, reduction = "apca") # true dimensionality ~13, may be low
+ggsave("struct_elbow_plot_dsb120clean.png")
+
+#Idents(struct) <- "old.ident"
+struct <- RunUMAP(struct, reduction = 'pca', dims = 1:30, 
+                  assay = 'integratedSCT_', 
+                  reduction.name = 'sct.umap', reduction.key = 'sctUMAP_')
+struct <- RunUMAP(struct, reduction = 'apca', dims = 1:10, 
+                  assay = 'integratedADT_', 
+                  reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
+
+struct <- FindNeighbors(struct, reduction = 'pca', dims = 1:30, 
+                        graph.name = 'sct.snn')
+struct <- FindClusters(struct, graph.name = 'sct.snn', resolution = 1.0, verbose = T)
+
+struct <- FindNeighbors(struct, reduction = 'apca', dims = 1:10,
+                        graph.name = 'adt.snn')
+struct <- FindClusters(struct, graph.name = 'adt.snn', resolution = 1.0, verbose = T)
+
+Idents(struct) <- 'sct.snn_res.1'
+p1 <- DimPlot(struct, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+Idents(struct) <- 'adt.snn_res.1'
+p2 <- DimPlot(struct, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_struct.png", width = 10, height = 5)
+
+# Using original labels from combined.rds
+Idents(struct) <- 'old.ident'
+p1 <- DimPlot(struct, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p2 <- DimPlot(struct, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_struct_origlabel.png", width = 10, height = 5)
+
+# > N WNN clustering ---------------------------
+# On the integrated SCT and integrated ADT data
+# Identify multimodal neighbors:
+
+struct <- FindMultiModalNeighbors(
+  struct, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:10), modality.weight.name = "SCT.weight")
+
+resolution.range <- seq(from = 0, to = 1.0, by = 0.1)
+
+# WNN - Find clusters using a range of resolutions
+struct <- FindClusters(object = struct, graph.name = "wsnn",
+                       reduction.name = "wnn.umap", algorithm = 3, 
+                       resolution = resolution.range, verbose = T)
+
+for (res in resolution.range){
+  md <- paste("wsnn_res.", res, sep = "")
+  Idents(struct) <- md
+  p <- DimPlot(struct, label = T, repel = T, label.size = 3) + NoLegend()
+  ggsave(paste("struct_dimplot_", "res_", res, ".png", sep = ""), plot = p,
+         width = 5, height = 5)
+}
+
+# Plotting
+library(clustree)
+clustree(struct, prefix = "wsnn_res.")
+ggsave("clustree_output_struct_WNN.pdf", width = 9.5, height = 11)
+
+# struct <- RunUMAP(struct, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+# res <- 1.5
+# struct <- FindClusters(struct, graph.name = "wsnn", algorithm = 3, resolution = res, verbose = FALSE)
+# 
+# # Data visualization:
+# DimPlot(struct, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 4) + NoLegend()
+# ggsave(paste("dimplot_", "res_", res, "struct.png", sep = ""), width = 5, height = 5)
+
+# > N SCT clustering  ---------------------------
+# WNN CLUSTERING IS UNSTABLE - USING SCT CLUSTERING ONLY FOR structPHILS
+
+resolution.range <- seq(from = 0, to = 1.5, by = 0.1)
+
+# SCT - Find clusters using a range of resolutions
+struct <- FindClusters(object = struct, graph.name = "sct.snn",
+                       resolution = resolution.range, verbose = T)
+
+for (res in resolution.range){
+  md <- paste("sct.snn_res.", res, sep = "")
+  Idents(struct) <- md
+  p <- DimPlot(struct, label = T, repel = T, label.size = 3, 
+               reduction = 'sct.umap') + NoLegend()
+  ggsave(paste("struct_dimplot_sct_", "res_", res, ".png", sep = ""), plot = p,
+         width = 5, height = 5)
+}
+
+# Plotting
+library(clustree)
+clustree(struct, prefix = "sct.snn_res.")
+ggsave("clustree_output_struct_WNN.pdf", width = 9.5, height = 11)
+
+struct <- FindClusters(struct, graph.name = "sct.snn",
                        resolution = 0.5, verbose = T)
 
 # try a 3D plot: 
