@@ -1202,6 +1202,86 @@ combined$celltype <- combined$sub_cluster
 Idents(combined) <- 'celltype'
 
 saveRDS(combined, 'combined_04_22_2021.rds')
+saveRDS(struct, 'struct_04_23_2021.rds')
+
+rm(struct, p)
+
+# Alveolar Macro Subclustering  ---------------------------
+# AKA Endothelial / Epithelial / Fibroblast
+Idents(combined) <- 'celltype'
+am <- subset(combined, idents = c('AM 1',
+                                  'AM 2',
+                                  'AM 3',
+                                  'AM 4',
+                                  'AM 5'))
+
+DefaultAssay(am) <- 'RNA'
+am <- DietSeurat(am, assays = c("RNA", "ADT"))
+dim(am)
+
+# Confirm subsetted metadata
+table(am@meta.data$seurat_clusters)
+
+# split data to rerun workflow
+seurat_list <- SplitObject(am, split.by = "orig.ident")
+
+# Rerun analysis on subsetted data:
+for (i in 1:length(x = seurat_list)){
+  sample_id <- names(seurat_list)[[i]]
+  print(sample_id)
+  
+  seurat_list[[i]] <- SCTransform(seurat_list[[i]],
+                                  method = "glmGamPoi",
+                                  vars.to.regress = "percent.mt",
+                                  variable.features.n = 3000, # changed to 3000
+                                  verbose = TRUE)
+}
+
+# > AM SCT Integration ---------------------------
+features <- SelectIntegrationFeatures(object.list = seurat_list, 
+                                      nfeatures = 3000 , verbose = TRUE)
+seurat_list <- PrepSCTIntegration(object.list = seurat_list, 
+                                  anchor.features = features, verbose = TRUE)
+anchors <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30,
+                                  anchor.features = features,
+                                  normalization.method = "SCT")
+
+# to_integrate <- SelectIntegrationFeatures(object.list = seurat_list, 
+#                                           nfeatures = 6000 , verbose = TRUE,
+#                                           new.assay.name = "integratedSCT_")
+rm(seurat_list, combined)
+
+# IMAGE SAVED
+
+am <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
+                    new.assay.name = 'integratedSCT_', verbose = T)
+saveRDS(am, file = "am_sct_integrated.rds")
+
+# > AM Regress out S and G2M scores ---------------------------
+# This will take some time. 
+am <- ScaleData(am, vars.to.regress = c("S.Score", "G2M.Score"))
+
+# > AM ADT Integration ---------------------------
+seurat_list <- anchors@object.list
+
+for (i in 1:length(x = seurat_list)){
+  DefaultAssay(seurat_list[[i]]) = "ADT"
+  VariableFeatures(seurat_list[[i]]) <- rownames(seurat_list[[i]][["ADT"]]) #select all ADT as variable features
+  # DSB ALREADY NORMALIZED
+  # seurat_list[[i]] <- NormalizeData(seurat_list[[i]], normalization.method = 'CLR', margin = 2) #CLR normalization for ADT
+}
+
+# Finding integration anchors for ADT
+anchorsADT <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30) # may need to alter dims
+amADT <- IntegrateData(anchorset = anchorsADT, dims = 1:30, new.assay.name = "integratedADT_")
+
+#I am not sure if this is a good idea:
+am[["integratedADT_"]] <- amADT[["integratedADT_"]] 
+
+rm(amADT, anchorsADT, anchors, seurat_list)
+saveRDS(am, "am_integrated.rds")
+# am <- readRDS("am_integrated.rds")
+
 
 # DEGs by Treatment  ---------------------------
 
