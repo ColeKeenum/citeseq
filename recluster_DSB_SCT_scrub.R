@@ -1501,9 +1501,293 @@ p <- ggplot(data=b1.markers, aes(x=avg_log2FC, y=-log10(p_val), col=diffexpresse
 ggsave('b1_markers.png', plot = p, width = 5, height = 5)
 # B 1 is naive?
 
-# T subsetting  ---------------------------
+# Cleaning up some metadata:
+combined$wsnn_res.0 <- NULL
+combined$wsnn_res.0.1 <- NULL
+combined$wsnn_res.0.2 <- NULL
+combined$wsnn_res.0.3 <- NULL
+combined$wsnn_res.0.4 <- NULL
+combined$wsnn_res.0.5 <- NULL
+combined$wsnn_res.0.6 <- NULL
+combined$wsnn_res.0.7 <- NULL
+combined$wsnn_res.0.8 <- NULL
+combined$wsnn_res.0.9 <- NULL
+combined$wsnn_res.1 <- NULL
+combined$wsnn_res.1.1 <- NULL
+combined$wsnn_res.1.2 <- NULL
+combined$wsnn_res.1.3 <- NULL
+combined$wsnn_res.1.4 <- NULL
+combined$wsnn_res.1.5 <- NULL
+combined$wsnn_res.1.6 <- NULL
+combined$wsnn_res.1.7 <- NULL
+combined$wsnn_res.1.8 <- NULL
+combined$wsnn_res.1.9 <- NULL
+combined$wsnn_res.2 <- NULL
 
+saveRDS(combined, 'combined_04_25_2021.rds')
+rm(b1.markers, b2.markers, b3.markers, p)
 
+# T & NK Cell Subclustering  ---------------------------
+Idents(combined) <- 'celltype'
+tcells <- subset(combined, idents = c('CD4 T 1',
+                                  'CD4 T 2',
+                                  'CD4 T 3',
+                                  'CD4 T 4',
+                                  'CD8 T',
+                                  'Treg',
+                                  'Nuocyte',
+                                  'NK'))
+
+DefaultAssay(tcells) <- 'RNA'
+tcells <- DietSeurat(tcells, assays = c("RNA", "ADT"))
+dim(tcells)
+
+# Confirm subsetted metadata
+table(tcells@meta.data$seurat_clusters)
+
+# split data to rerun workflow
+seurat_list <- SplitObject(tcells, split.by = "orig.ident")
+
+# Rerun analysis on subsetted data:
+for (i in 1:length(x = seurat_list)){
+  sample_id <- names(seurat_list)[[i]]
+  print(sample_id)
+  
+  seurat_list[[i]] <- SCTransform(seurat_list[[i]],
+                                  method = "glmGamPoi",
+                                  vars.to.regress = "percent.mt",
+                                  variable.features.n = 3000, 
+                                  verbose = TRUE)
+}
+
+# > tcells SCT Integration ---------------------------
+features <- SelectIntegrationFeatures(object.list = seurat_list, 
+                                      nfeatures = 3000 , verbose = TRUE)
+seurat_list <- PrepSCTIntegration(object.list = seurat_list, 
+                                  anchor.features = features, verbose = TRUE)
+anchors <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30,
+                                  anchor.features = features,
+                                  normalization.method = "SCT")
+
+# to_integrate <- SelectIntegrationFeatures(object.list = seurat_list, 
+#                                           nfeatures = 6000 , verbose = TRUE,
+#                                           new.assay.name = "integratedSCT_")
+rm(seurat_list, combined)
+
+# IMAGE SAVED
+
+tcells <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
+                    new.assay.name = 'integratedSCT_', verbose = T)
+saveRDS(tcells, file = "tcells_sct_integrated.rds")
+
+# > tcells Regress out S and G2M scores ---------------------------
+# This will take some time. 
+tcells <- ScaleData(tcells, vars.to.regress = c("S.Score", "G2M.Score"))
+
+# > tcells ADT Integration ---------------------------
+seurat_list <- anchors@object.list
+
+for (i in 1:length(x = seurat_list)){
+  DefaultAssay(seurat_list[[i]]) = "ADT"
+  VariableFeatures(seurat_list[[i]]) <- rownames(seurat_list[[i]][["ADT"]]) #select all ADT as variable features
+  # DSB ALREADY NORMALIZED
+  # seurat_list[[i]] <- NormalizeData(seurat_list[[i]], normalization.method = 'CLR', margin = 2) #CLR normalization for ADT
+}
+
+# Finding integration anchors for ADT
+anchorsADT <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30) # may need to alter dims
+tcellsADT <- IntegrateData(anchorset = anchorsADT, dims = 1:30, new.assay.name = "integratedADT_")
+
+#I tcells not sure if this is a good idea:
+tcells[["integratedADT_"]] <- tcellsADT[["integratedADT_"]] 
+
+rm(tcellsADT, anchorsADT, anchors, seurat_list)
+saveRDS(tcells, "tcells_integrated.rds")
+# tcells <- readRDS("tcells_integrated.rds")
+
+# > tcells Select PCs ---------------------------
+DefaultAssay(tcells) <- "integratedSCT_"
+all.genes <- rownames(tcells)
+tcells <- ScaleData(tcells, features = all.genes)
+tcells <- RunPCA(tcells, verbose = T)
+ElbowPlot(tcells, ndims = 50, reduction = 'pca') # will use 30 because SCT is more accurate 
+ggsave("tcells_elbow_plot_sct_dsb120clean.png")
+
+# aPCA on ADT
+DefaultAssay(tcells) <- 'integratedADT_'
+tcells <- ScaleData(tcells)
+tcells <- RunPCA(tcells, reduction.name = 'apca')
+ElbowPlot(tcells, ndims = 30, reduction = "apca") # true dimensionality ~13, may be low
+ggsave("tcells_elbow_plot_dsb120clean.png")
+
+#Idents(tcells) <- "old.ident"
+tcells <- RunUMAP(tcells, reduction = 'pca', dims = 1:30, 
+              assay = 'integratedSCT_', 
+              reduction.name = 'sct.umap', reduction.key = 'sctUMAP_')
+tcells <- RunUMAP(tcells, reduction = 'apca', dims = 1:11, 
+              assay = 'integratedADT_', 
+              reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
+
+tcells <- FindNeighbors(tcells, reduction = 'pca', dims = 1:30, 
+                    graph.name = 'sct.snn')
+tcells <- FindClusters(tcells, graph.name = 'sct.snn', resolution = 1.0, verbose = T)
+
+tcells <- FindNeighbors(tcells, reduction = 'apca', dims = 1:11,
+                    graph.name = 'adt.snn')
+tcells <- FindClusters(tcells, graph.name = 'adt.snn', resolution = 1.0, verbose = T)
+
+Idents(tcells) <- 'sct.snn_res.1'
+p1 <- DimPlot(tcells, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+Idents(tcells) <- 'adt.snn_res.1'
+p2 <- DimPlot(tcells, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_tcells.png", width = 10, height = 5)
+
+# Using original labels from combined.rds
+Idents(tcells) <- 'celltype'
+p1 <- DimPlot(tcells, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p2 <- DimPlot(tcells, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_tcells_origlabel.png", width = 10, height = 5)
+
+# > tcells WNN clustering ---------------------------
+# On the integrated SCT and integrated ADT data
+# Identify multimodal neighbors:
+
+tcells <- FindMultiModalNeighbors(
+  tcells, reduction.list = list("pca", "apca"), 
+  dims.list = list(1:30, 1:11), modality.weight.name = "SCT.weight")
+
+tcells <- RunUMAP(tcells, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+
+resolution.range <- seq(from = 0, to = 2.0, by = 0.1)
+
+# WNN - Find clusters using a range of resolutions
+tcells <- FindClusters(object = tcells, graph.name = "wsnn",
+                       reduction.name = "wnn.umap", algorithm = 3, 
+                       resolution = resolution.range, verbose = T)
+
+for (res in resolution.range){
+  md <- paste("wsnn_res.", res, sep = "")
+  Idents(tcells) <- md
+  p <- DimPlot(tcells, label = T, repel = T, label.size = 3, reduction = 'wnn.umap') + NoLegend()
+  ggsave(paste("tcells_dimplot_", "res_", res, ".png", sep = ""), plot = p,
+         width = 5, height = 5)
+}
+
+# Plotting
+library(clustree)
+clustree(tcells, prefix = "wsnn_res.")
+ggsave("clustree_output_tcells_WNN.pdf", width = 9.5, height = 11)
+
+Idents(tcells) <- 'celltype'
+DimPlot(tcells, reduction = 'wnn.umap', label = TRUE, repel = TRUE, 
+        label.size = 2.5) + NoLegend()
+ggsave('tcells_wnnumap_OG_lab.png', height = 5, width = 5)
+
+tcells <- FindClusters(object = tcells, graph.name = "wsnn",
+                       reduction.name = "wnn.umap", algorithm = 3, 
+                       resolution = 0.8, verbose = T)
+
+# > tcells Calculate DEG markers  ---------------------------
+DefaultAssay(tcells) <- "SCT"
+tcells.markers <- FindAllMarkers(tcells, only.pos = FALSE, 
+                             min.pct = 0.1, logfc.threshold = 0.6, 
+                             max.cells.per.ident = Inf)
+all.markers <- tcells.markers %>% group_by(cluster)
+write.csv(all.markers, file = "tcells_cluster_biomarkers_labeled_cite.csv", row.names = FALSE)
+
+## Plotting top 5 marker genes on heatmap: 
+top5 <- tcells.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+p <- DoHeatmap(subset(tcells, downsample = 100),
+               features = top5$gene, size = 3, angle = 30) + NoLegend()
+ggsave("tcells_top5_markers_heatmap_labeled_cite.png", plot = p, width = 10, height = 6)
+
+DefaultAssay(tcells) <- 'SCT'
+FeaturePlot(tcells, features = 'Foxp3', reduction = 'wnn.umap')
+FeaturePlot(tcells, features = 'Cd3e', reduction = 'wnn.umap')
+
+DefaultAssay(tcells) <- 'ADT'
+FeaturePlot(tcells, features = 'CD4-TotalA', reduction = 'wnn.umap',
+            min.cutoff = 0, max.cutoff = 'q99')
+FeaturePlot(tcells, features = 'CD8b-TotalA', reduction = 'wnn.umap',
+            min.cutoff = 0, max.cutoff = 'q99')
+
+# wnn.umap labels on sct umap
+DimPlot(tcells, reduction = 'sct.umap', label = TRUE, repel = TRUE, 
+        label.size = 2.5) + NoLegend()
+
+FeaturePlot(tcells, features = 'doublet_score', reduction = 'wnn.umap')
+
+# Rename
+tcells <- RenameIdents(tcells, 
+                       '0' = 'CD4 T', 
+                       '1' = 'NK',
+                       '2' = 'CD4 T', 
+                       '3' = 'CD8 T',
+                       '4' = 'Nuocyte',
+                       '5' = 'CD4 T', # activated Tbc1d4 and Tnfsf8 as exhaustion signatures, Icos as activation
+                       '6' = 'Treg',
+                       '7' = 'CD4 T', # unsure!, but clusters with CD4 T on sct umap
+                       '8' = 'NKT',
+                       '9' = 'NKT', # T and NK markers
+                       '10' = 'gd T',
+                       '11' = 'Treg', #proliferating
+                       '12' = 'CD4 T') # activated, but grouping
+
+p <- DimPlot(tcells, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_tcells_cd4_grouped_lab.png", height = 5, width = 5)
+
+rm(all.markers, p, p1, p2, tcells.markers, top5, all.genes, features)
+
+saveRDS(tcells, 'tcells_cite.rds')
+
+# > tcells apply to parent --------------------------- 
+
+combined <- readRDS('combined_04_25_2021.rds')
+
+Idents(combined) <- 'sub_cluster'
+unique(Idents(combined))
+combined <- SetIdent(combined, cells = Cells(tcells), Idents(tcells))
+combined$sub_cluster <- Idents(combined)
+
+DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
+        cells = Cells(tcells), reduction = 'wnn.umap') + NoLegend()
+ggsave('tcells_subcluster_onUMAP.png', height = 5, width = 5)
+
+DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
+        cells = Cells(tcells), reduction = 'sct.umap') + NoLegend()
+ggsave('tcells_subcluster_onUMAP_SCT.png', height = 5, width = 5)
+
+combined$celltype <- combined$sub_cluster
+Idents(combined) <- 'celltype'
+unique(Idents(combined))
+
+# Dealing with cDC 2  ---------------------------
+combined <- RenameIdents(combined, 'cDC 2' = 'NC Mono')
+combined <- RenameIdents(combined, 'NC Mono ' = 'NC Mono') # error in naming earlier
+
+# Removing doublets  ---------------------------
+combined <- subset(combined, idents = 'DOUBLET', invert = TRUE)
+
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_OG_lab.png", height = 5, width = 5)
+
+saveRDS(combined, 'combined_04_25_2021b.rds')
 
 # DEGs by Treatment  ---------------------------
 
