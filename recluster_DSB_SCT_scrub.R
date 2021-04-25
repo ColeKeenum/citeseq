@@ -1090,7 +1090,7 @@ ggsave("clustree_output_struct_SCT.pdf", width = 9.5, height = 11)
 struct <- FindClusters(struct, graph.name = "sct.snn",
                        resolution = 1.0, verbose = T)
 
-# Calculate DEG markers  ---------------------------
+# > Struct Calculate DEG markers  ---------------------------
 DefaultAssay(struct) <- "SCT"
 struct.markers <- FindAllMarkers(struct, only.pos = FALSE, 
                                  min.pct = 0.1, logfc.threshold = 0.6, 
@@ -1182,6 +1182,7 @@ ggsave("umap_labeled_struct_subcluster.png", height = 5, width = 5)
 rm(all.markers, p, p1, p2, struct.markers, top5)
 # > Struct apply to parent --------------------------- 
 
+# struct <- readRDS('struct_04_23_2021.rds')
 combined <- readRDS('combined_04192021.rds')
 
 # Generate a new column called sub_cluster in the metadata
@@ -1281,6 +1282,227 @@ am[["integratedADT_"]] <- amADT[["integratedADT_"]]
 rm(amADT, anchorsADT, anchors, seurat_list)
 saveRDS(am, "am_integrated.rds")
 # am <- readRDS("am_integrated.rds")
+
+# > AM Select PCs ---------------------------
+DefaultAssay(am) <- "integratedSCT_"
+all.genes <- rownames(am)
+am <- ScaleData(am, features = all.genes)
+am <- RunPCA(am, verbose = T)
+ElbowPlot(am, ndims = 50, reduction = 'pca') # will use 30 because SCT is more accurate 
+ggsave("am_elbow_plot_sct_dsb120clean.png")
+
+# aPCA on ADT
+DefaultAssay(am) <- 'integratedADT_'
+am <- ScaleData(am)
+am <- RunPCA(am, reduction.name = 'apca')
+ElbowPlot(am, ndims = 30, reduction = "apca") # true dimensionality ~13, may be low
+ggsave("am_elbow_plot_dsb120clean.png")
+
+#Idents(am) <- "old.ident"
+am <- RunUMAP(am, reduction = 'pca', dims = 1:30, 
+                  assay = 'integratedSCT_', 
+                  reduction.name = 'sct.umap', reduction.key = 'sctUMAP_')
+am <- RunUMAP(am, reduction = 'apca', dims = 1:10, 
+                  assay = 'integratedADT_', 
+                  reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
+
+am <- FindNeighbors(am, reduction = 'pca', dims = 1:30, 
+                        graph.name = 'sct.snn')
+am <- FindClusters(am, graph.name = 'sct.snn', resolution = 1.0, verbose = T)
+
+am <- FindNeighbors(am, reduction = 'apca', dims = 1:10,
+                        graph.name = 'adt.snn')
+am <- FindClusters(am, graph.name = 'adt.snn', resolution = 1.0, verbose = T)
+
+Idents(am) <- 'sct.snn_res.1'
+p1 <- DimPlot(am, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+Idents(am) <- 'adt.snn_res.1'
+p2 <- DimPlot(am, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_am.png", width = 10, height = 5)
+
+# Using original labels from combined.rds
+Idents(am) <- 'celltype'
+p1 <- DimPlot(am, reduction = 'sct.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p2 <- DimPlot(am, reduction = 'adt.umap', label = TRUE,
+              repel = TRUE, label.size = 2.5) + NoLegend()
+p1 + p2
+ggsave("SCT_or_ADT_only_clustering_am_origlabel.png", width = 10, height = 5)
+
+# > AM SCT clustering  ---------------------------
+
+resolution.range <- seq(from = 0, to = 1.0, by = 0.1)
+
+# SCT - Find clusters using a range of resolutions
+am <- FindClusters(object = am, graph.name = "sct.snn",
+                       resolution = resolution.range, verbose = T)
+
+for (res in resolution.range){
+  md <- paste("sct.snn_res.", res, sep = "")
+  Idents(am) <- md
+  p <- DimPlot(am, label = T, repel = T, label.size = 3, 
+               reduction = 'sct.umap') + NoLegend()
+  ggsave(paste("am_dimplot_sct_", "res_", res, ".png", sep = ""), plot = p,
+         width = 5, height = 5)
+}
+
+# Plotting
+library(clustree)
+clustree(am, prefix = "sct.snn_res.")
+ggsave("clustree_output_am_SCT.pdf", width = 9.5, height = 11)
+
+am <- FindClusters(object = am, graph.name = "sct.snn",
+                   resolution = 0.5, verbose = T)
+
+# > AM Calculate DEG markers  ---------------------------
+DefaultAssay(am) <- "SCT"
+am.markers <- FindAllMarkers(am, only.pos = FALSE, 
+                                 min.pct = 0.1, logfc.threshold = 0.6, 
+                                 max.cells.per.ident = Inf)
+all.markers <- am.markers %>% group_by(cluster)
+write.csv(all.markers, file = "am_cluster_biomarkers_labeled.csv", row.names = FALSE)
+
+## Plotting top 5 marker genes on heatmap: 
+top5 <- am.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
+p <- DoHeatmap(subset(am, downsample = 100),
+               features = top5$gene, size = 3, angle = 30) + NoLegend()
+ggsave("am_top5_markers_heatmap_labeled.png", plot = p, width = 10, height = 6)
+
+saveRDS(am, 'am.rds')
+rm(all.markers, am, am.markers, p, p1, p2, top5, all.genes, md, res, 
+   resolution.range)
+
+# > AM Rename original AM subclusters from main  ---------------------------
+# This is so obvious, we don't need to do any returning to parent
+combined <- readRDS('combined_04_22_2021.rds')
+Idents(combined) <- 'sub_cluster'
+unique(Idents(combined))
+combined <- RenameIdents(combined, 
+                         'AM 1' = 'AM',
+                         'AM 2' = 'AM',
+                         'AM 3' = 'AM',
+                         'AM 4' = 'AM',
+                         'AM 5' = 'AM')
+unique(Idents(combined))
+
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_OG_am_lab.png", height = 5, width = 5)
+
+# Renaming Neutrophils for real:
+combined <- RenameIdents(combined, 
+                         'N 1' = 'N B',
+                         'N 2' = 'N A',
+                         'N 3' = 'N C',
+                         'N 4' = 'N C',
+                         'N 5' = 'N A',
+                         'N 6' = 'N B')
+unique(Idents(combined))
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_OG_neutro_lab.png", height = 5, width = 5)
+
+# B Cell No Subsetting  ---------------------------
+# Want to see if we can get a Volcano Plot of DEG *markers* in B cells
+# change y axis of graphs to p-val adj
+
+b3.markers <- FindMarkers(combined, 
+                          ident.1 = Cells(subset(combined, idents = 'B 3')),
+                          ident.2 = Cells(subset(combined, idents = c('B 1', 
+                                                                      'B 2', 
+                                                                      'B 3'))),
+                          logfc.threshold = 0, min.pct = 0)
+
+b3.markers$cellType <- 'B 3'
+b3.markers$diffexpressed <- "NO"
+b3.markers$diffexpressed[b3.markers$avg_log2FC > 0.6 & b3.markers$p_val_adj < 0.05] <- "UP"
+b3.markers$diffexpressed[b3.markers$avg_log2FC < -0.6 & b3.markers$p_val_adj < 0.05] <- "DOWN"
+b3.markers <- cbind(gene_symbol = rownames(b3.markers), b3.markers)
+b3.markers$delabel <- NA
+b3.markers$delabel[b3.markers$diffexpressed != "NO"] <- b3.markers$gene_symbol[b3.markers$diffexpressed != "NO"]
+
+p <- ggplot(data=b3.markers, aes(x=avg_log2FC, y=-log10(p_val), col=diffexpressed, label=delabel)) +
+  geom_point(size = 0.4) +
+  theme_classic() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "black", "red")) + 
+  NoLegend() +
+  labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(p-value)')) +
+  theme(text = element_text(size=8, family = "sans"),
+        axis.title=element_text(size=10, family = "sans", face="bold"))
+
+ggsave('B3_markers.png', plot = p, width = 5, height = 5)
+# B 3 appears inflammed
+
+b2.markers <- FindMarkers(combined, 
+                          ident.1 = Cells(subset(combined, idents = 'B 2')),
+                          ident.2 = Cells(subset(combined, idents = c('B 1', 
+                                                                      'B 2', 
+                                                                      'B 3'))),
+                          logfc.threshold = 0, min.pct = 0)
+
+b2.markers$cellType <- 'B 2'
+b2.markers$diffexpressed <- "NO"
+b2.markers$diffexpressed[b2.markers$avg_log2FC > 0.6 & b2.markers$p_val_adj < 0.05] <- "UP"
+b2.markers$diffexpressed[b2.markers$avg_log2FC < -0.6 & b2.markers$p_val_adj < 0.05] <- "DOWN"
+b2.markers <- cbind(gene_symbol = rownames(b2.markers), b2.markers)
+b2.markers$delabel <- NA
+b2.markers$delabel[b2.markers$diffexpressed != "NO"] <- b2.markers$gene_symbol[b2.markers$diffexpressed != "NO"]
+
+p <- ggplot(data=b2.markers, aes(x=avg_log2FC, y=-log10(p_val), col=diffexpressed, label=delabel)) +
+  geom_point(size = 0.4) +
+  theme_classic() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "black", "red")) + 
+  NoLegend() +
+  labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(p-value)')) +
+  theme(text = element_text(size=8, family = "sans"),
+        axis.title=element_text(size=10, family = "sans", face="bold"))
+
+ggsave('b2_markers.png', plot = p, width = 5, height = 5)
+# B 2 is likely an Ig-Producing subset
+
+b1.markers <- FindMarkers(combined, 
+                          ident.1 = Cells(subset(combined, idents = 'B 1')),
+                          ident.2 = Cells(subset(combined, idents = c('B 1', 
+                                                                      'B 2', 
+                                                                      'B 3'))),
+                          logfc.threshold = 0, min.pct = 0)
+
+b1.markers$cellType <- 'B 1'
+b1.markers$diffexpressed <- "NO"
+b1.markers$diffexpressed[b1.markers$avg_log2FC > 0.6 & b1.markers$p_val_adj < 0.05] <- "UP"
+b1.markers$diffexpressed[b1.markers$avg_log2FC < -0.6 & b1.markers$p_val_adj < 0.05] <- "DOWN"
+b1.markers <- cbind(gene_symbol = rownames(b1.markers), b1.markers)
+b1.markers$delabel <- NA
+b1.markers$delabel[b1.markers$diffexpressed != "NO"] <- b1.markers$gene_symbol[b1.markers$diffexpressed != "NO"]
+
+p <- ggplot(data=b1.markers, aes(x=avg_log2FC, y=-log10(p_val), col=diffexpressed, label=delabel)) +
+  geom_point(size = 0.4) +
+  theme_classic() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "black", "red")) + 
+  NoLegend() +
+  labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(p-value)')) +
+  theme(text = element_text(size=8, family = "sans"),
+        axis.title=element_text(size=10, family = "sans", face="bold"))
+
+ggsave('b1_markers.png', plot = p, width = 5, height = 5)
+# B 1 is naive?
+
+# T subsetting  ---------------------------
+
 
 
 # DEGs by Treatment  ---------------------------
