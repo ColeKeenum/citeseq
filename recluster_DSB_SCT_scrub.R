@@ -891,6 +891,33 @@ neutro <- FindClusters(neutro, graph.name = "sct.snn",
 # run 3D_UMAP_plots.R
 # run clustering part of citeseq_cell_markers.R script
 
+# > N alternate projections ---------------------------
+load('pre_webGL_workspace.RData')
+
+# pca_ key is the one to use for Neutrophils, PC_ was already calcualted
+
+DimPlot(neutro, reduction = 'pca')
+
+DimPlot(neutro, reduction = 'pca', group.by = 'celltype')
+ggsave('neutro_pca_OG_celltype.png', width = 5, height = 5)
+
+FeaturePlot(neutro, reduction = 'pca', features = 'Mmp8')
+FeaturePlot(neutro, reduction = 'pca', features = 'Ccl3')
+
+DefaultAssay(neutro) <- 'SCT'
+FeaturePlot(neutro, reduction = 'pca', features = c('Mmp8', 'Ccl3'), blend = T)
+ggsave('neutro_pca_co_expression.png', width = 16, height = 4)
+
+VizDimLoadings(neutro, dims = 1:2, reduction = "pca")
+ggsave('neutro_pca_dim_loadings.png', width = 10, height = 5)
+
+# pca_1 pos
+FeaturePlot(neutro, reduction = 'pca', features = c('B2m', 'Ctsb', 'Ctsz', 'Bri3', 'Atp6v0c'))
+# pca_1 neg
+FeaturePlot(neutro, reduction = 'pca', features = c('S100a8', 'Alox5ap', 'S100a11', 'S100a9', 'Retnlg', 'Anxa1'))
+
+FeaturePlot(neutro, reduction = 'pca', features = 'Camp') # Cathelicidin
+
 # Structural Cell Subclustering  ---------------------------
 # AKA Endothelial / Epithelial / Fibroblast
 Idents(combined) <- 'celltype'
