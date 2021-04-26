@@ -1777,6 +1777,8 @@ combined <- RenameIdents(combined, 'cDC 2' = 'NC Mono')
 combined <- RenameIdents(combined, 'NC Mono ' = 'NC Mono') # error in naming earlier
 
 # Removing doublets  ---------------------------
+combined <- readRDS('combined_04_25_2021b.rds')
+
 combined <- subset(combined, idents = 'DOUBLET', invert = TRUE)
 
 p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
@@ -1787,7 +1789,39 @@ p <- p + theme(legend.position = "none",
                axis.ticks = element_blank())
 ggsave("umap_OG_lab.png", height = 5, width = 5)
 
-saveRDS(combined, 'combined_04_25_2021b.rds')
+saveRDS(combined, 'combined_04_25_2021c.rds')
+
+# Figuring out Neutrophil / Eosinophils  ---------------------------
+combined  <- readRDS('combined_04_25_2021c.rds')
+
+DefaultAssay(combined) <- 'SCT'
+FeaturePlot(combined, features = c('Ptprc', 'Itgax', 'Ly6g',    
+                                   'Siglecf', 'Ccr3', 'Prg2',
+                                   'Epx', 'Il13', 'Ly6c1'), 
+            reduction = 'wnn.umap', ncol = 3)
+ggsave('some_eosinophil_genes.png', width = 12, height = 12)
+
+DefaultAssay(combined) <- 'ADT'
+FeaturePlot(combined, features = c('Ly6g.Ly6c-TotalA', 'Ly-6G-TotalA', 'CDLy6C-TotalA'),
+            cols = c("lightgrey","darkgreen"),
+            reduction = 'wnn.umap', ncol = 3, min.cutoff = 0, max.cutoff = 'q99')
+ggsave('some_eosinophil_adt.png', width = 12, height = 4)
+
+# Table of celltypes vs. trt as above  ---------------------------
+combined$celltype <- Idents(combined)
+
+# number of cells per treatment
+t1 <- table(combined$orig.ident)
+# number of cells per type per treatment
+t2 <- table(combined$celltype, col.names = combined$orig.ident)
+col_order <- c('naive', 'p4', 'mp4', 'p24', 'mp24')
+t2 <- t2[ ,col_order]
+# number of cells per cluster
+t3 <- table(combined@active.ident)
+
+write.csv(t1, file = "t1_condensed.csv", row.names = F)
+write.csv(t2, file = "t2_condensed.csv", row.names = T)
+write.csv(t3, file = "t3_condensed.csv", row.names = F)
 
 # DEGs by Treatment  ---------------------------
 
