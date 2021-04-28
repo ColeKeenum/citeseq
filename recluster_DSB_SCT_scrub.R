@@ -901,6 +901,11 @@ DimPlot(neutro, reduction = 'pca')
 DimPlot(neutro, reduction = 'pca', group.by = 'celltype')
 ggsave('neutro_pca_OG_celltype.png', width = 5, height = 5)
 
+p <- DimPlot(neutro, reduction = 'pca', group.by = 'celltype', split.by = 'orig.ident')
+p$data$orig.ident <- factor(x = p$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+p
+ggsave('neutro_pca_OG_celltype_orig.ident.png', width = 15, height = 3.5)
+
 FeaturePlot(neutro, reduction = 'pca', features = 'Mmp8')
 FeaturePlot(neutro, reduction = 'pca', features = 'Ccl3')
 
@@ -912,11 +917,19 @@ VizDimLoadings(neutro, dims = 1:2, reduction = "pca")
 ggsave('neutro_pca_dim_loadings.png', width = 10, height = 5)
 
 # pca_1 pos
-FeaturePlot(neutro, reduction = 'pca', features = c('B2m', 'Ctsb', 'Ctsz', 'Bri3', 'Atp6v0c'))
+FeaturePlot(neutro, reduction = 'pca', ncol = 3,
+            features = c('B2m', 'Ctsb', 'Ctsz', 'Bri3', 'Atp6v0c'))
+ggsave('pca_1_pos_neutro.png', width = 5*3, height = 5*2)
+
 # pca_1 neg
-FeaturePlot(neutro, reduction = 'pca', features = c('S100a8', 'Alox5ap', 'S100a11', 'S100a9', 'Retnlg', 'Anxa1'))
+FeaturePlot(neutro, reduction = 'pca', ncol = 3,
+            features = c('S100a8', 'Alox5ap', 'S100a11', 'S100a9', 'Retnlg', 'Anxa1'))
+ggsave('pca_1_neg_neutro.png', width = 5*3, height = 5*2)
+
 
 FeaturePlot(neutro, reduction = 'pca', features = 'Camp') # Cathelicidin
+
+
 
 # Structural Cell Subclustering  ---------------------------
 # AKA Endothelial / Epithelial / Fibroblast
@@ -1834,7 +1847,7 @@ FeaturePlot(combined, features = c('Ly6g.Ly6c-TotalA', 'Ly-6G-TotalA', 'CDLy6C-T
             reduction = 'wnn.umap', ncol = 3, min.cutoff = 0, max.cutoff = 'q99')
 ggsave('some_eosinophil_adt.png', width = 12, height = 4)
 
-# Table of celltypes vs. trt as above  ---------------------------
+# Condensed Table of celltypes vs. trt as above  ---------------------------
 combined$celltype <- Idents(combined)
 
 # number of cells per treatment
