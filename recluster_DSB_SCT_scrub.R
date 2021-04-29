@@ -1828,6 +1828,7 @@ p <- p + theme(legend.position = "none",
 ggsave("umap_OG_lab.png", height = 5, width = 5)
 
 saveRDS(combined, 'combined_04_25_2021c.rds')
+# combined <- readRDS('combined_04_25_2021c.rds')
 
 # Figuring out Neutrophil / Eosinophils  ---------------------------
 combined  <- readRDS('combined_04_25_2021c.rds')
@@ -1861,11 +1862,14 @@ write.csv(t1, file = "t1_condensed.csv", row.names = F)
 write.csv(t2, file = "t2_condensed.csv", row.names = T)
 write.csv(t3, file = "t3_condensed.csv", row.names = F)
 
-# Muscat  ---------------------------
+# DEGs by Treatment vs. Naive  ---------------------------
+combined  <- readRDS('combined_04_25_2021c.rds')
+unique(Idents(combined))
+unique(combined$celltype) 
+# wierd stuff here... like cDC 2 which was condensed, will rename celltype
+combined$celltype <- Idents(combined)
 
-
-
-# DEGs by Treatment  ---------------------------
+freq_table <- read.csv('t2_condensed.csv', row.names = 'X')
 
 # Create metadata colum for celltype + treatment condition
 combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
@@ -1874,6 +1878,18 @@ Idents(combined) <- "celltype.trt"
 # DEGs will be calculated relative to naive
 DefaultAssay(combined) <- "SCT" # you definitely dont want to do this on integratedSCT_
 cellList <- unique(combined$celltype)
+cellList <- levels(cellList)
+
+# check freq_table for any celltypes with less than 3 cells in them...
+# will not include these for DEG analysis
+tmp_cellList <- cellList
+for (i in 1:length(cellList)){
+  if ( any(freq_table[cellList[[i]], ] < 3)){
+    print(cellList[[i]])
+    tmp_cellList <- tmp_cellList[tmp_cellList != cellList[i]]
+  }
+}
+cellList <- tmp_cellList; rm(tmp_cellList)
 
 trtList <- list("p4", "mp4", "p24", "mp24")
 
@@ -1890,9 +1906,6 @@ for (i in 1:length(x = cellList)){
     ident.1 <- paste(cell, trt, sep = "_") # current celltype + treatment ident
     print(ident.1)
     
-    if(ident.1 == "Lymphatic Fibroblasts_p24" | ident.1 == "Lymphatic Fibroblasts_mp24" | ident.1 == "Myeloid Cells_p24"){
-      next # if I knew how to catch exceptions... I would try and fix this better
-    } else {
       
       degList[[(i-1)*4+j]] <- (FindMarkers(combined, ident.1 = ident.1, ident.2 = base, logfc.threshold = 0))
       degList[[(i-1)*4+j]]$cellType <- ident.1
@@ -1916,15 +1929,14 @@ for (i in 1:length(x = cellList)){
         geom_text_repel() +
         scale_color_manual(values=c("blue", "black", "red")) + 
         NoLegend() +
-        labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(p-value)')) +
+        labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(adj. p-value)')) +
         theme(text = element_text(size=8, family = "sans"),
               axis.title=element_text(size=10, family = "sans", face="bold"))
-    }
   }
 }
 
-saveRDS(degList, file = "test.degList.naive.rds")
-saveRDS(graphList, file = "test.degList.naive.rds")
+saveRDS(degList, file = "04292021.degList.vs.naive.rds")
+saveRDS(graphList, file = "04292021.degList.vs.naive.rds")
 
 # Saving plots as png:
 for (i in 1:length(x = graphList)){
@@ -1933,11 +1945,71 @@ for (i in 1:length(x = graphList)){
   filename <- chartr("/", " ", filename)
   
   ggsave(filename = filename, plot = graphList[[i]],
-         width = 3.5, height = 3.5)
+         width = 3.75, height = 3.75)
 }
 
 degList <- do.call(rbind, degList)
-write.csv(degList, file = "2021-04-19 DEGs.csv")
+write.csv(degList, file = "2021-04-29 DEGs.csv")
+
+# GSEA  ---------------------------
+library(fgsea)
+library(msigdbr)
+# Edited by MCK based on analysis of Hurskainen et all. 2021 Nat. Comm.
+# Using version 7.4 from the MSigDB
+
+result_table <- read.csv('2021-04-29 DEGs.csv', row.names = 'X')
+
+# test <- result_table$cellType
+# result_table$cellType <- gsub("(.*)_.*","\\1",test)
+
+# Collect the Hallmark, KEGG, GO, and Reactome datasets
+# THESE ARE FOR HUMAN
+# hallmarks <- fgsea::gmtPathways("./GeneLists/h.all.v7.4.symbols.gmt")
+# kegg <- fgsea::gmtPathways("./GeneLists/c2.cp.kegg.v7.4.symbols.gmt")
+# go <- fgsea::gmtPathways("./GeneLists/c5.go.bp.v7.4.symbols.gmt")
+# reactome <- fgsea::gmtPathways("./GeneLists/c2.cp.reactome.v7.4.symbols.gmt")
+
+# Define a function to run GSEA for a single cluster
+
+# Msigdbr usage TEST:
+msigdbr_collections()
+
+hallmarks <- msigdbr(species = "Mus musculus", category = "H")
+hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
+kegg <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "KEGG")
+kegg <- split(x = kegg$gene_symbol, f = kegg$gs_name)
+go <- msigdbr(species = "Mus musculus", category = "C5", subcategory = "BP")
+go <- split(x = go$gene_symbol, f = go$gs_name)
+reactome <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "REACTOME")
+reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
+
+gene_sets <- c(hallmarks, kegg, go, reactome)
+
+runGSEA <- function(cluster){
+  print(cluster)
+  results <- filter(result_table, cellType == cluster)
+  results <- filter(results, p_val <= 0.05 |
+                      avg_log2FC >= log2(1.5)) # 1.5 FC cutoff
+  results <- arrange(results, desc(avg_log2FC))
+  
+  cluster_genes <- results$avg_log2FC
+  names(cluster_genes) <- results$gene
+  
+  gsea <- fgsea(pathways = gene_sets,
+                stats = cluster_genes,
+                minSize=15,
+                maxSize=500,
+                nproc = 2,
+                eps = 0) # removed nperm
+  gsea$cluster <- cluster
+  
+  return(gsea)
+}
+
+cluster_list <- unique(result_table$cellType)
+fgsea_results <- lapply(cluster_list, runGSEA)
+
+saveRDS(fgsea_results, 'fgsea_results_eps0.rds')
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
