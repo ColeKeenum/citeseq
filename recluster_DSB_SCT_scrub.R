@@ -929,8 +929,6 @@ ggsave('pca_1_neg_neutro.png', width = 5*3, height = 5*2)
 
 FeaturePlot(neutro, reduction = 'pca', features = 'Camp') # Cathelicidin
 
-
-
 # Structural Cell Subclustering  ---------------------------
 # AKA Endothelial / Epithelial / Fibroblast
 Idents(combined) <- 'celltype'
@@ -1862,6 +1860,10 @@ t3 <- table(combined@active.ident)
 write.csv(t1, file = "t1_condensed.csv", row.names = F)
 write.csv(t2, file = "t2_condensed.csv", row.names = T)
 write.csv(t3, file = "t3_condensed.csv", row.names = F)
+
+# Muscat  ---------------------------
+
+
 
 # DEGs by Treatment  ---------------------------
 
