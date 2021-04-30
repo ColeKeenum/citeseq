@@ -1985,12 +1985,14 @@ reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
 
 gene_sets <- c(hallmarks, kegg, go, reactome)
 
+# using a cutoff of 0.05 p-adj (FDR) and abs(1.5 = FC)
 runGSEA <- function(cluster){
   print(cluster)
   results <- filter(result_table, cellType == cluster)
-  results <- filter(results, p_val <= 0.05 |
-                      avg_log2FC >= log2(1.5)) # 1.5 FC cutoff
+  results <- filter(results, p_val <= 0.05 &
+                      abs(avg_log2FC) >= log2(1.5)) # +/-1.5 FC cutoff
   results <- arrange(results, desc(avg_log2FC))
+  print(dim(results)[1])
   
   cluster_genes <- results$avg_log2FC
   names(cluster_genes) <- results$gene
@@ -2009,7 +2011,80 @@ runGSEA <- function(cluster){
 cluster_list <- unique(result_table$cellType)
 fgsea_results <- lapply(cluster_list, runGSEA)
 
-saveRDS(fgsea_results, 'fgsea_results_eps0.rds')
+saveRDS(cluster_list, 'cluster_list_pos_neg.rds')
+saveRDS(fgsea_results, 'fgsea_results_eps0_pos_neg.rds')
+
+fgsea_results <- do.call("rbind", fgsea_results)
+fgsea_results <- as.data.frame(fgsea_results)
+fgsea_results$leadingEdge <- as.character(fgsea_results$leadingEdge)
+write.csv(fgsea_results, 'fgsea_results_04292021_pos_neg.csv')
+
+fgsea_results <- filter(fgsea_results, padj < 0.05)
+write.csv(fgsea_results, 'fgsea_results_04292021_pos_neg_FILTERED.csv')
+
+# DEG / GSEA Visualization ---------------------------
+
+result_table <- read.csv('2021-04-29 DEGs.csv', row.names = 'X')
+
+# Make bar charts of overall number of DEGs: 
+# (colored regions on volcano plots)
+
+test <- result_table$cellType
+result_table$overallCellType <- gsub("(.*)_.*","\\1",test)
+
+cellList <- unique(result_table$overallCellType)
+
+plot_list <- vector(mode = 'list', length = length(cellList))
+  
+for (i in 1:length(cellList)){
+  ## Testing on Adv Fib because it has GSEA categories in all trt groups:
+  df <- filter(result_table, overallCellType == cellList[i])
+
+  #groups <- cluster_list
+  groups <- unique(df$cellType)
+  
+  if (length(groups) < 4){print('STOP')}
+  
+  num_pos <- numeric(length(groups))
+  num_neg <- numeric(length(groups))
+  for (j in 1:length(groups)){
+    sub_df <- filter(df, cellType == groups[j])
+    num_pos[j] <- sum(sub_df$p_val < 0.05 & sub_df$avg_log2FC > log2(1.5) )
+    num_neg[j] <- sum(sub_df$p_val  < 0.05 & sub_df$avg_log2FC < -log2(1.5) )
+  }
+  
+  groups <- rep(groups,2)
+  deg <- c('pos', 'pos', 'pos', 'pos', 'neg', 'neg', 'neg', 'neg')
+  num <- c(num_pos, num_neg)
+  
+  groups <- gsub(".*_", "", groups)
+  
+  data <- data.frame(groups, deg, num )
+  
+  p <- ggplot(data, aes(fill=deg, y=num, x=groups)) + 
+    geom_bar(position="stack", stat="identity") + 
+    labs(title=paste(cellList[i])) + 
+    theme(axis.title.x=element_blank(), 
+          plot.title = element_text(hjust = 0.5)) + NoLegend()
+    
+  p$data$groups <- factor(x = p$data$groups, levels = groups[1:4])
+  
+  plot_list[[i]] <- p
+  
+  ggsave(paste(cellList[i] , '_totalDEG.png', sep = ''), plot = p, width = 4, height = 4)
+}
+
+# T cell, Nuocyte, and NK / NKT cell metacluster overall DEG plot grid:
+cowplot::plot_grid(plotlist = plot_list[c(2,4,5,6,7,8)])
+ggsave('t_NK_metacluster_DEG.png', width = 9, height = 6)
+
+# Plotting Select GSEA Terms:
+
+
+# Same for B cells
+cowplot::plot_grid(plotlist = plot_list[c(23, 27)])
+ggsave('B_metacluster_DEG.png', width = 6, height = 3)
+
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
