@@ -894,6 +894,55 @@ neutro <- FindClusters(neutro, graph.name = "sct.snn",
 # > N alternate projections ---------------------------
 load('pre_webGL_workspace.RData')
 
+Idents(neutro) <- 'old.ident'
+neutro <- RenameIdents(object = neutro, 
+                         '0' = "N B", 
+                         '1' = "N A", 
+                         '2' = "gCap 1",
+                         '3' = "gCap 2",
+                         '4' = "B 1",
+                         '5' = "AM 1",
+                         '6' = "AT2 1",
+                         '7' = "gCap 3",
+                         '8' = "CD4 T 1",
+                         '9' = "NK",
+                         '10' = "N C",
+                         '11' = "AM 2",
+                         '12' = "C Mono",
+                         '13' = "CD4 T 2",
+                         '14' = "CD8 T",
+                         '15' = "Myofib",
+                         '16' = "NC Mono ",
+                         '17' = "Lipofib 1",
+                         '18' = "AT1",
+                         '19' = "N C",
+                         '20' = "N A",
+                         '21' = "IM",
+                         '22' = "CD4 T 3",
+                         '23' = "aCap",
+                         '24' = "cDC 1",
+                         '25' = "Nuocyte",
+                         '26' = "B 2",
+                         '27' = "Efb1 Fib",
+                         '28' = "Treg",
+                         '29' = "CD4 T 4",
+                         '30' = "AM 3",
+                         '31' = "Vein",
+                         '32' = "Baso",
+                         '33' = "Macro",
+                         '34' = "pDC",
+                         '35' = "AM 4",
+                         '36' = "Lipofib 2",
+                         '37' = "N B",
+                         '38' = "AT2 2",
+                         '39' = "Lymph Fib",
+                         '40' = "B 3",
+                         '41' = "AM 5",
+                         '42' = "cDC 2",
+                         '43' = "Clara",
+                         '44' = "Mtx Fib")
+neutro[["condensed"]] <- Idents(neutro)
+
 # pca_ key is the one to use for Neutrophils, PC_ was already calcualted
 
 DimPlot(neutro, reduction = 'pca')
@@ -901,10 +950,18 @@ DimPlot(neutro, reduction = 'pca')
 DimPlot(neutro, reduction = 'pca', group.by = 'celltype')
 ggsave('neutro_pca_OG_celltype.png', width = 5, height = 5)
 
+DimPlot(neutro, reduction = 'pca', group.by = 'condensed')
+ggsave('neutro_pca_condensed_celltype.png', width = 5, height = 5)
+
 p <- DimPlot(neutro, reduction = 'pca', group.by = 'celltype', split.by = 'orig.ident')
 p$data$orig.ident <- factor(x = p$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 p
 ggsave('neutro_pca_OG_celltype_orig.ident.png', width = 15, height = 3.5)
+
+p <- DimPlot(neutro, reduction = 'pca', group.by = 'condensed', split.by = 'orig.ident')
+p$data$orig.ident <- factor(x = p$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+p
+ggsave('neutro_pca_condensed_orig.ident.png', width = 15, height = 3.5)
 
 FeaturePlot(neutro, reduction = 'pca', features = 'Mmp8')
 FeaturePlot(neutro, reduction = 'pca', features = 'Ccl3')
@@ -925,7 +982,6 @@ ggsave('pca_1_pos_neutro.png', width = 5*3, height = 5*2)
 FeaturePlot(neutro, reduction = 'pca', ncol = 3,
             features = c('S100a8', 'Alox5ap', 'S100a11', 'S100a9', 'Retnlg', 'Anxa1'))
 ggsave('pca_1_neg_neutro.png', width = 5*3, height = 5*2)
-
 
 FeaturePlot(neutro, reduction = 'pca', features = 'Camp') # Cathelicidin
 
@@ -1985,12 +2041,14 @@ reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
 
 gene_sets <- c(hallmarks, kegg, go, reactome)
 
-# using a cutoff of 0.05 p-adj (FDR) and abs(1.5 = FC)
 runGSEA <- function(cluster){
   print(cluster)
   results <- filter(result_table, cellType == cluster)
-  results <- filter(results, p_val <= 0.05 &
-                      abs(avg_log2FC) >= log2(1.5)) # +/-1.5 FC cutoff
+  
+  # results <- filter(results, p_val <= 0.05 &
+  #                     abs(avg_log2FC) >= log2(1.5)) # +/-1.5 FC cutoff
+  results <- filter(results, pct.1 >= 0.05)
+  
   results <- arrange(results, desc(avg_log2FC))
   print(dim(results)[1])
   
@@ -2001,8 +2059,8 @@ runGSEA <- function(cluster){
                 stats = cluster_genes,
                 minSize=15,
                 maxSize=500,
-                nproc = 2,
-                eps = 0) # removed nperm
+                nproc = 3,
+                eps = 1e-10) # eps cutoff for speed
   gsea$cluster <- cluster
   
   return(gsea)
@@ -2011,16 +2069,16 @@ runGSEA <- function(cluster){
 cluster_list <- unique(result_table$cellType)
 fgsea_results <- lapply(cluster_list, runGSEA)
 
-saveRDS(cluster_list, 'cluster_list_pos_neg.rds')
-saveRDS(fgsea_results, 'fgsea_results_eps0_pos_neg.rds')
+saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_CUTOFF.rds')
+saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_CUTOFF.rds')
 
 fgsea_results <- do.call("rbind", fgsea_results)
 fgsea_results <- as.data.frame(fgsea_results)
 fgsea_results$leadingEdge <- as.character(fgsea_results$leadingEdge)
-write.csv(fgsea_results, 'fgsea_results_04292021_pos_neg.csv')
+write.csv(fgsea_results, 'fgsea_results_05012021_PCT_CUTOFF.csv')
 
 fgsea_results <- filter(fgsea_results, padj < 0.05)
-write.csv(fgsea_results, 'fgsea_results_04292021_pos_neg_FILTERED.csv')
+write.csv(fgsea_results, 'fgsea_results_05012021_PCT_CUTOFF_FILTERED.csv')
 
 # DEG / GSEA Visualization ---------------------------
 
@@ -2074,17 +2132,66 @@ for (i in 1:length(cellList)){
   ggsave(paste(cellList[i] , '_totalDEG.png', sep = ''), plot = p, width = 4, height = 4)
 }
 
+# Define function to write a frequency table with top 10 +/- GSEA categories
+top_GSEA <- function(df, n = 10){
+  pos <- filter(df, NES > 0)
+  neg <- filter(df, NES < 0)
+  
+  pos <- as.data.frame(table(pos$pathway))
+  neg <- as.data.frame(table(neg$pathway))
+  
+  pos <- pos[order(pos$Freq, decreasing = T), ]
+  neg <- neg[order(neg$Freq, decreasing = T), ]
+  
+  colnames(pos) <- c('pos_category', 'pos_freq')
+  colnames(neg) <- c('neg_category', 'neg_freq')
+  
+  pos_neg <- data.frame(pos[1:n, ], neg[1:n, ])
+  return(pos_neg)
+}
+
+# Plotting Select GSEA Terms:
+library(readxl)
+
+all_filt_res <- read_excel('fgsea_results_05012021_PCT_CUTOFF_FILTERED.xlsx')
+term_frequencies <- table(all_filt_res$pathway)
+write.csv(term_frequencies, 'fgsea_results_frequencies_all_numb.csv')
+
+df_total <- top_GSEA(all_filt_res, n = 30)
+write.csv(df_total, 'fgsea_results_30_top_pos_neg.csv')
+
+all_filt_res$cellType <- gsub("(.*)_.*","\\1",all_filt_res$cluster)
+
 # T cell, Nuocyte, and NK / NKT cell metacluster overall DEG plot grid:
 cowplot::plot_grid(plotlist = plot_list[c(2,4,5,6,7,8)])
 ggsave('t_NK_metacluster_DEG.png', width = 9, height = 6)
 
-# Plotting Select GSEA Terms:
+# T / NK cell metacluster
+results <- filter(all_filt_res, cellType == 'NK' | cellType == 'gd T' | 
+                    cellType == 'Nuocyte' | cellType ==  'Treg' | 
+                    cellType == 'NKT' | cellType == 'CD4 T' |  
+                    cellType == 'CD8 T')
+t_nk_df <- top_GSEA(results, n = 10)
+write.csv(t_nk_df, 'fgsea_T_NK_frequencies_PCT.csv', row.names = F)
 
+# DOT PLOT LIKE KRAUSGRUBER ET AL
+
+ggplot(results, aes(fill = cluster, y = NES, x = pathway)) + 
+  geom_bar(position="dodge", stat="identity") + 
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
+ggsave('B_GSEA.png', width = 9, height = 5)
 
 # Same for B cells
 cowplot::plot_grid(plotlist = plot_list[c(23, 27)])
 ggsave('B_metacluster_DEG.png', width = 6, height = 3)
 
+results <- filter(full_results, cluster == 'B 1_mp24' | cluster == 'B 2_mp24')
+ggplot(results, aes(fill = cluster, y = NES, x = pathway)) + 
+  geom_bar(position="dodge", stat="identity") + 
+  theme(axis.title.y = element_blank()) +
+  coord_flip()
+ggsave('B_GSEA.png', width = 9, height = 5)
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
