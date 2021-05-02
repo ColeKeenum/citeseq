@@ -2095,10 +2095,8 @@ cellList <- unique(result_table$overallCellType)
 plot_list <- vector(mode = 'list', length = length(cellList))
   
 for (i in 1:length(cellList)){
-  ## Testing on Adv Fib because it has GSEA categories in all trt groups:
   df <- filter(result_table, overallCellType == cellList[i])
 
-  #groups <- cluster_list
   groups <- unique(df$cellType)
   
   if (length(groups) < 4){print('STOP')}
@@ -2132,6 +2130,8 @@ for (i in 1:length(cellList)){
   ggsave(paste(cellList[i] , '_totalDEG.png', sep = ''), plot = p, width = 4, height = 4)
 }
 
+saveRDS(plot_list, 'GSEA_plot_list.rds')
+
 # Define function to write a frequency table with top 10 +/- GSEA categories
 top_GSEA <- function(df, n = 10){
   # Pathways that I do not want to be represented in my pseudo-heuristic method
@@ -2148,7 +2148,7 @@ top_GSEA <- function(df, n = 10){
                            'GO_NERVOUS_SYSTEM_PROCESS',
                            'GO_POSITIVE_REGULATION_OF_NERVOUS_SYSTEM_DEVELOPMENT')
   
-  df <- filter(results, !(pathway %in% uninteresting_paths))
+  df <- filter(df, !(pathway %in% uninteresting_paths))
   
   pos <- filter(df, NES > 0)
   neg <- filter(df, NES < 0)
@@ -2187,7 +2187,7 @@ all_filt_res$cellType <- gsub("(.*)_.*","\\1",all_filt_res$cluster)
 cowplot::plot_grid(plotlist = plot_list[c(2,4,5,6,7,8)])
 ggsave('t_NK_metacluster_DEG.png', width = 9, height = 6)
 
-# T / NK cell metacluster
+# GSEA Plot
 results <- filter(all_filt_res, cellType == 'NK' | cellType == 'gd T' | 
                     cellType == 'Nuocyte' | cellType ==  'Treg' | 
                     cellType == 'NKT' | cellType == 'CD4 T' |  
@@ -2195,24 +2195,16 @@ results <- filter(all_filt_res, cellType == 'NK' | cellType == 'gd T' |
 t_nk_df <- top_GSEA(results, n = 10)
 write.csv(t_nk_df, 'fgsea_T_NK_frequencies_PCT.csv', row.names = F)
 
-results <- filter(results, pathway %in% t_nk_df$pos_category | 
-                           pathway %in% t_nk_df$neg_category)
+format_GSEA <- function(df_results, top_df, n = 25){
+  df_results <- filter(df_results, pathway %in% top_df$pos_category | 
+                      pathway %in% top_df$neg_category)
+  bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_')
+  df_results$pathway <- str_remove(df_results$pathway, paste(bad_str, collapse = '|'))
+  df_results$pathway <- str_trunc(df_results$pathway, n)
+  return(df_results)
+}
 
-
-# DOT PLOT LIKE KRAUSGRUBER ET AL
-# gene_cluster <- read_tsv('https://github.com/davemcg/davemcg.github.io/raw/master/content/post/scRNA_dotplot_data.tsv.gz')
-# gene_cluster %>% sample_n(5)
-# markers <- gene_cluster$Gene %>% unique()
-# gene_cluster %>% filter(Gene %in% markers) %>% 
-#   mutate(`% Expressing` = (cell_exp_ct/cell_ct) * 100) %>% 
-#   filter(count > 0, `% Expressing` > 1) %>% 
-#   ggplot(aes(x=cluster, y = Gene, color = count, size = `% Expressing`)) + 
-#   geom_point()
-
-bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_')
-results$pathway <- str_remove(results$pathway, paste(bad_str, collapse = '|'))
-results$pathway <- str_trunc(results$pathway, 25)
-#results$NES <- as.factor(results$NES)
+results <- format_GSEA(results, t_nk_df)
 
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
   geom_point() + cowplot::theme_cowplot() +
@@ -2222,22 +2214,138 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
 ggsave('T_NK_GSEA_dot_plot.png', width = 13, height = 5)
 
-ggplot(results, aes(fill = cluster, y = NES, x = pathway)) + 
-  geom_bar(position="dodge", stat="identity") + 
-  theme(axis.title.y = element_blank()) +
-  coord_flip()
-ggsave('B_GSEA.png', width = 9, height = 5)
-
+# > B cell metacluster ---------------------------
 # Same for B cells
 cowplot::plot_grid(plotlist = plot_list[c(23, 27)])
 ggsave('B_metacluster_DEG.png', width = 6, height = 3)
 
-results <- filter(full_results, cluster == 'B 1_mp24' | cluster == 'B 2_mp24')
-ggplot(results, aes(fill = cluster, y = NES, x = pathway)) + 
-  geom_bar(position="dodge", stat="identity") + 
-  theme(axis.title.y = element_blank()) +
-  coord_flip()
-ggsave('B_GSEA.png', width = 9, height = 5)
+# GSEA Plot
+results <- filter(all_filt_res, cellType == 'B 1' | cellType == 'B 2')
+b_df <- top_GSEA(results, n = 10)
+write.csv(b_df, 'fgsea_B_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, b_df, n = 35)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('B_GSEA_dot_plot.png', width = 8, height = 5)
+
+# > Endothelial cell metacluster ---------------------------
+cellList
+
+cowplot::plot_grid(plotlist = plot_list[c(13,15,21)], ncol = 3)
+ggsave('endo_metacluster_DEG.png', width = 9, height = 3)
+
+# GSEA Plot
+results <- filter(all_filt_res, cellType == 'gCap' | cellType == 'aCap' |
+                    cellType == 'Vein')
+endo_df <- top_GSEA(results, n = 10)
+write.csv(endo_df, 'fgsea_endo_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, endo_df, n = 40)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('Endo_GSEA_dot_plot.png', width = 10, height = 5)
+
+# > Fibroblast cell metacluster ---------------------------
+cellList
+
+cowplot::plot_grid(plotlist = plot_list[c(16,17,18,19,22)], ncol = 5)
+ggsave('fibro_metacluster_DEG.png', width = 15, height = 3)
+
+# GSEA Plot
+fib <- c('Myofib', 'Lipofib', 'Ebf1+ Fib', 'Alv Fib', 'Adv Fib')
+results <- filter(all_filt_res, cellType %in% fib)
+fib_df <- top_GSEA(results, n = 10)
+write.csv(fib_df, 'fgsea_fib_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, fib_df, n = 40)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('Fib_GSEA_dot_plot.png', width = 12, height = 5)
+
+# > Epithelial cell metacluster ---------------------------
+cellList
+
+cowplot::plot_grid(plotlist = plot_list[c(14,20)], ncol = 2)
+ggsave('epithelial_metacluster_DEG.png', width = 6, height = 3)
+
+# GSEA Plot
+results <- filter(all_filt_res, cellType == 'AT 2' | cellType == 'AT 1')
+at_df <- top_GSEA(results, n = 10)
+write.csv(at_df, 'fgsea_AT_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, at_df, n = 40)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('Epithelial_GSEA_dot_plot.png', width = 9.5, height = 5)
+
+# > Monocyte cell metacluster ---------------------------
+cellList
+
+cowplot::plot_grid(plotlist = plot_list[c(1,24,25,26,29,30)], ncol = 6)
+ggsave('Monocyte_metacluster_DEG.png', width = 6*3, height = 3)
+
+# GSEA Plot
+mono <- c('NC Mono', 'C Mono', 'IM', 'cDC 1', 'pDC')
+results <- filter(all_filt_res, cellType %in% mono)
+mono_df <- top_GSEA(results, n = 10)
+write.csv(mono_df, 'fgsea_mono_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, mono_df, n = 40)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('Mono_GSEA_dot_plot.png', width = 12.5, height = 5)
+
+# > Neutro / Alv. Macro metacluster ---------------------------
+cellList
+
+cowplot::plot_grid(plotlist = plot_list[c(9,10,11,12,28)], ncol = 5)
+ggsave('AM_neutro_metacluster_DEG.png', width = 3*5, height = 3)
+
+# GSEA Plot
+n_am <- cellList[c(9,10,11,12,28)]
+results <- filter(all_filt_res, cellType %in% n_am)
+n_am_df <- top_GSEA(results, n = 10)
+write.csv(n_am_df, 'fgsea_neutro_AM_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, n_am_df, n = 40)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('N_AM_GSEA_dot_plot.png', width = 12.5, height = 5)
+
+# Cell Chat Analysis ---------------------------
+
+
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
