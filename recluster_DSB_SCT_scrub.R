@@ -2060,7 +2060,7 @@ runGSEA <- function(cluster){
                 minSize=15,
                 maxSize=500,
                 nproc = 3,
-                eps = 1e-10) # eps cutoff for speed
+                eps = 0) # no eps cutoff so we have "true" P-val
   gsea$cluster <- cluster
   
   return(gsea)
@@ -2069,16 +2069,16 @@ runGSEA <- function(cluster){
 cluster_list <- unique(result_table$cellType)
 fgsea_results <- lapply(cluster_list, runGSEA)
 
-saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_CUTOFF.rds')
-saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_CUTOFF.rds')
+saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_EPS.rds')
+saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_EPS.rds')
 
 fgsea_results <- do.call("rbind", fgsea_results)
 fgsea_results <- as.data.frame(fgsea_results)
 fgsea_results$leadingEdge <- as.character(fgsea_results$leadingEdge)
-write.csv(fgsea_results, 'fgsea_results_05012021_PCT_CUTOFF.csv')
+write.csv(fgsea_results, 'fgsea_results_05012021_PCT_EPS.csv')
 
 fgsea_results <- filter(fgsea_results, padj < 0.05)
-write.csv(fgsea_results, 'fgsea_results_05012021_PCT_CUTOFF_FILTERED.csv')
+write.csv(fgsea_results, 'fgsea_results_05012021_PCT_EPS_FILT.csv')
 
 # DEG / GSEA Visualization ---------------------------
 
@@ -2134,6 +2134,22 @@ for (i in 1:length(cellList)){
 
 # Define function to write a frequency table with top 10 +/- GSEA categories
 top_GSEA <- function(df, n = 10){
+  # Pathways that I do not want to be represented in my pseudo-heuristic method
+  uninteresting_paths <- c('KEGG_PARKINSONS_DISEASE',
+                           'KEGG_HUNTINGTONS_DISEASE',
+                           'KEGG_ALZHEIMERS_DISEASE',
+                           'KEGG_GRAFT_VERSUS_HOST_DISEASE',
+                           'KEGG_PRION_DISEASES',
+                           'REACTOME_NERVOUS_SYSTEM_DEVELOPMENT',
+                           'GO_CENTRAL_NERVOUS_SYSTEM_NEURON_DIFFERENTIATION',
+                           'GO_CENTRAL_NERVOUS_SYSTEM_NEURON_DEVELOPMENT',
+                           'GO_NERVE_DEVELOPMENT',
+                           'GO_NEGATIVE_REGULATION_OF_NERVOUS_SYSTEM_DEVELOPMENT',
+                           'GO_NERVOUS_SYSTEM_PROCESS',
+                           'GO_POSITIVE_REGULATION_OF_NERVOUS_SYSTEM_DEVELOPMENT')
+  
+  df <- filter(results, !(pathway %in% uninteresting_paths))
+  
   pos <- filter(df, NES > 0)
   neg <- filter(df, NES < 0)
   
@@ -2152,8 +2168,12 @@ top_GSEA <- function(df, n = 10){
 
 # Plotting Select GSEA Terms:
 library(readxl)
+library(tidyverse)
+library(ggdendro)
+library(cowplot)
+library(ggtree)
 
-all_filt_res <- read_excel('fgsea_results_05012021_PCT_CUTOFF_FILTERED.xlsx')
+all_filt_res <- read_excel('fgsea_results_05012021_PCT_EPS_FILT.xlsx')
 term_frequencies <- table(all_filt_res$pathway)
 write.csv(term_frequencies, 'fgsea_results_frequencies_all_numb.csv')
 
@@ -2162,6 +2182,7 @@ write.csv(df_total, 'fgsea_results_30_top_pos_neg.csv')
 
 all_filt_res$cellType <- gsub("(.*)_.*","\\1",all_filt_res$cluster)
 
+# > T / NK cell metacluster ---------------------------
 # T cell, Nuocyte, and NK / NKT cell metacluster overall DEG plot grid:
 cowplot::plot_grid(plotlist = plot_list[c(2,4,5,6,7,8)])
 ggsave('t_NK_metacluster_DEG.png', width = 9, height = 6)
@@ -2174,7 +2195,32 @@ results <- filter(all_filt_res, cellType == 'NK' | cellType == 'gd T' |
 t_nk_df <- top_GSEA(results, n = 10)
 write.csv(t_nk_df, 'fgsea_T_NK_frequencies_PCT.csv', row.names = F)
 
+results <- filter(results, pathway %in% t_nk_df$pos_category | 
+                           pathway %in% t_nk_df$neg_category)
+
+
 # DOT PLOT LIKE KRAUSGRUBER ET AL
+# gene_cluster <- read_tsv('https://github.com/davemcg/davemcg.github.io/raw/master/content/post/scRNA_dotplot_data.tsv.gz')
+# gene_cluster %>% sample_n(5)
+# markers <- gene_cluster$Gene %>% unique()
+# gene_cluster %>% filter(Gene %in% markers) %>% 
+#   mutate(`% Expressing` = (cell_exp_ct/cell_ct) * 100) %>% 
+#   filter(count > 0, `% Expressing` > 1) %>% 
+#   ggplot(aes(x=cluster, y = Gene, color = count, size = `% Expressing`)) + 
+#   geom_point()
+
+bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_')
+results$pathway <- str_remove(results$pathway, paste(bad_str, collapse = '|'))
+results$pathway <- str_trunc(results$pathway, 25)
+#results$NES <- as.factor(results$NES)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('T_NK_GSEA_dot_plot.png', width = 13, height = 5)
 
 ggplot(results, aes(fill = cluster, y = NES, x = pathway)) + 
   geom_bar(position="dodge", stat="identity") + 
