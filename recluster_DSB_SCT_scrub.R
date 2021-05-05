@@ -2343,9 +2343,29 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
 ggsave('N_AM_GSEA_dot_plot.png', width = 12.5, height = 5)
 
-# Cell Chat Analysis ---------------------------
+# Important Violin Plots ----
+combined@meta.data$orig.ident <-
+  factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 
+p1 <- VlnPlot(combined, features = c('CD200-TotalA'), idents = c('AT 2'), 
+              split.by = 'orig.ident', assay = 'ADT') + NoLegend()
+p2 <- VlnPlot(combined, features = c('CD200r-TotalA'), idents = c('AM'), 
+              split.by = 'orig.ident', assay = 'ADT')
+p1 | p2
+ggsave('CD200_ADT.png', width = 10, height = 5)
 
+VlnPlot(combined, features = 'CD19-TotalA', idents = 'B 1', 
+        split.by = 'orig.ident', assay  = 'ADT')
+
+'Ccr2' %in% rownames(combined@assays[["SCT"]]@scale.data)
+
+combined <- ScaleData(combined, features = 'Ccr2')
+VlnPlot(combined, features = 'Ccr2', idents = c('C Mono', 'NC Mono', 'IM', 'cDC 1'), 
+        split.by = 'orig.ident', assay  = 'SCT', slot = 'scale.data')
+
+FeaturePlot(combined, features = c('Il1b', 'S100a8'), reduction = 'wnn.umap')
+
+FeaturePlot(combined, features = c('Ccr2'), reduction = 'wnn.umap')
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
