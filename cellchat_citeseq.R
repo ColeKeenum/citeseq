@@ -471,22 +471,27 @@ for (i in 1:length(interest)){
   ggsave(paste(interest[[i]], '_signaling_changes.png', sep = ''), width = 4*4, height = 4)
 }
 
-gg1 <- netAnalysis_signalingChanges_scatter(cellchat, idents.use = "Inflam. DC")
-gg2 <- netAnalysis_signalingChanges_scatter(cellchat, idents.use = "cDC1")
-patchwork::wrap_plots(plots = list(gg1,gg2))
-
 # Identify conserved and context-specific signaling pathways:
+
+# Functional Similarity:
 cellchat <- computeNetSimilarityPairwise(cellchat, type = "functional")
-#> Compute signaling network similarity for datasets 1 2
 cellchat <- netEmbedding(cellchat, type = "functional")
-#> Manifold learning of the signaling networks for datasets 1 2
 cellchat <- netClustering(cellchat, type = "functional")
-#> Classification learning of the signaling networks for datasets 1 2
-# Visualization in 2D-space
 netVisual_embeddingPairwise(cellchat, type = "functional", label.size = 3.5)
-#> 2D visualization of signaling networks from datasets 1 2
+ggsave('functionally_conserved_signaling.png', width = 5, height = 4)
 
+# Structural Similarity:
+cellchat <- computeNetSimilarityPairwise(cellchat, type = "structural")
+  # THIS LINE TAKES FOREVER... THEN ERROR:
+  # Error in base::colSums(x, na.rm = na.rm, dims = dims, ...) : 
+  # 'x' must be an array of at least two dimensions
 
+cellchat <- netEmbedding(cellchat, type = "structural")
+cellchat <- netClustering(cellchat, type = "structural")
+netVisual_embeddingPairwise(cellchat, type = "structural", label.size = 3.5)
+ggsave('structurally_conserved_signaling.png', width = 5, height = 4)
+
+# giving me wierd errors......
 
 
 ####
