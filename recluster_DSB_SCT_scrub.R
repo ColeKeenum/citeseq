@@ -894,6 +894,13 @@ neutro <- FindClusters(neutro, graph.name = "sct.snn",
 # > N alternate projections ---------------------------
 load('pre_webGL_workspace.RData')
 
+# JUST KILL THE ASSAY BRO: SO RUN THIS
+# neutro[['pca']] <- NULL
+# DefaultAssay(neutro) <- "integratedSCT_"
+# all.genes <- rownames(neutro)
+# neutro <- ScaleData(neutro, features = all.genes)
+# neutro <- RunPCA(neutro, verbose = T)
+
 Idents(neutro) <- 'old.ident'
 neutro <- RenameIdents(object = neutro, 
                          '0' = "N B", 
@@ -984,6 +991,9 @@ FeaturePlot(neutro, reduction = 'pca', ncol = 3,
 ggsave('pca_1_neg_neutro.png', width = 5*3, height = 5*2)
 
 FeaturePlot(neutro, reduction = 'pca', features = 'Camp') # Cathelicidin
+
+FeaturePlot(neutro, features = 'Cxcr2', reduction = 'pca')
+
 
 # Structural Cell Subclustering  ---------------------------
 # AKA Endothelial / Epithelial / Fibroblast
@@ -2343,7 +2353,9 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
 ggsave('N_AM_GSEA_dot_plot.png', width = 12.5, height = 5)
 
-# Important Violin Plots ----
+# Important Violin and Feature Plots ----
+# combined <- readRDS('combined_04_25_2021c.rds')
+
 combined@meta.data$orig.ident <-
   factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 
@@ -2366,6 +2378,38 @@ VlnPlot(combined, features = 'Ccr2', idents = c('C Mono', 'NC Mono', 'IM', 'cDC 
 FeaturePlot(combined, features = c('Il1b', 'S100a8'), reduction = 'wnn.umap')
 
 FeaturePlot(combined, features = c('Ccr2'), reduction = 'wnn.umap')
+
+# Figure 1 Marker ADTs:
+DefaultAssay(combined) <- 'ADT'
+adt.to.plot <- c('CD45','ESAM', 'CD326', 'Ly-6G', 'CD19',  
+                 'CD11b', 'CD170', 'TCRB', 'CD4', 'CD8b')
+gg <- list()
+for (i in 1:length(adt.to.plot)){
+  adt <- paste(adt.to.plot[[i]], '-TotalA', sep = '')
+  gg[[i]] <- FeaturePlot(combined, features = adt, reduction = 'wnn.umap',
+                         cols = c("lightgrey","darkgreen"), min.cutoff=0, 
+                         max.cutoff = "q99") + 
+              theme(axis.title = element_blank(),
+                    axis.text = element_blank(),
+                    axis.ticks = element_blank())
+}
+ggsave('Fig1_ADT.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 5),
+       height = 2*3, width = 5*3)
+
+
+# Neutrophil stuff:
+DefaultAssay(combined) <- 'SCT'
+FeaturePlot(combined, features = 'Cxcr2', reduction = 'wnn.umap')
+
+# For Bhawana BMES:
+p <- DimPlot(combined, reduction = 'wnn.umap', group.by = 'orig.ident', shuffle = T)
+p <- p + theme(title = element_blank(), legend.position = "none",
+                   panel.grid = element_blank(),
+                   axis.title = element_blank(),
+                   axis.text = element_blank(),
+                   axis.ticks = element_blank())
+ggsave('BMES_Bhawana_Cb.png', plot = p, width = 4, height = 2.75)
+
 
 ###############################################################################
 # Generating DEGs relative for mp vs. p treatments at 4 and 24 hours

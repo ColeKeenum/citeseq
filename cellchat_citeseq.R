@@ -480,19 +480,29 @@ cellchat <- netClustering(cellchat, type = "functional")
 netVisual_embeddingPairwise(cellchat, type = "functional", label.size = 3.5)
 ggsave('functionally_conserved_signaling.png', width = 5, height = 4)
 
+netVisual_embeddingZoomIn(cellchat, type = "functional", nCol = 1)
+  # giving errors
+  
 # Structural Similarity:
 cellchat <- computeNetSimilarityPairwise(cellchat, type = "structural")
   # THIS LINE TAKES FOREVER... THEN ERROR:
   # Error in base::colSums(x, na.rm = na.rm, dims = dims, ...) : 
   # 'x' must be an array of at least two dimensions
 
-cellchat <- netEmbedding(cellchat, type = "structural")
-cellchat <- netClustering(cellchat, type = "structural")
-netVisual_embeddingPairwise(cellchat, type = "structural", label.size = 3.5)
-ggsave('structurally_conserved_signaling.png', width = 5, height = 4)
+  cellchat <- netEmbedding(cellchat, type = "structural")
+  cellchat <- netClustering(cellchat, type = "structural")
+  netVisual_embeddingPairwise(cellchat, type = "structural", label.size = 3.5)
+  ggsave('structurally_conserved_signaling.png', width = 5, height = 4)
 
-# giving me wierd errors......
+# All Compared
+gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(1,2,3,4,5), stacked = T, do.stat = TRUE)
+gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(1,2,3,4,5), stacked = F, do.stat = TRUE)
+gg1 + gg2
 
+# 4 hour timepoints
+gg1 <- rankNet(cellchat, mode = "comparison", comparison = c(1,2,3), stacked = T, do.stat = TRUE)
+gg2 <- rankNet(cellchat, mode = "comparison", comparison = c(1,2,3), stacked = F, do.stat = TRUE)
+gg1 + gg2
 
 ####
 
