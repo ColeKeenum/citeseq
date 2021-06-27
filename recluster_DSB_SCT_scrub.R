@@ -2224,6 +2224,23 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
 ggsave('T_NK_GSEA_dot_plot.png', width = 13, height = 5)
 
+# > LESS CELLS FOR NIH ---------------------------
+results <- filter(all_filt_res, cellType == 'CD4 T' |  
+                    cellType == 'CD8 T' | cellType == 'B 1' | cellType == 'B 2')
+t_nk_df <- top_GSEA(results, n = 10)
+write.csv(t_nk_df, 'fgsea_T_NK_frequencies_PCT.csv', row.names = F)
+
+results <- format_GSEA(results, t_nk_df)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('NIH_GSEA_dot_plot.png', width = 9.75, height = 4.2)
+
+
 # > B cell metacluster ---------------------------
 # Same for B cells
 cowplot::plot_grid(plotlist = plot_list[c(23, 27)])

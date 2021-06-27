@@ -7,7 +7,11 @@ options(stringsAsFactors = FALSE)
 setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
 
 # Split up treatment matrices ---------------------------
-combined <- readRDS('combined_04_25_2021c.rds')
+#combined <- readRDS('combined_04_25_2021c.rds')
+combined <- readRDS('combined_NIH_06222021.rds')
+
+combined$celltype <- Idents(combined)
+
 Idents(combined) <- 'celltype'
 combined[['RNA']] <- NULL # save memory
 combined[['integratedSCT_']] <- NULL
@@ -18,7 +22,7 @@ combined <- RenameIdents(combined, 'NC Mono ' = 'NC Mono') # error in naming ear
 
 combined$celltype <- Idents(combined)
 
-freq_table <- read.csv('t2_condensed.csv', row.names = 'X')
+freq_table <- read.csv('t2_condensed_nih.csv', row.names = 'X')
 
 # Create metadata colum for celltype + treatment condition
 combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
@@ -45,9 +49,11 @@ combined <- subset(combined, idents = cellList)
 
 seurat_list <- SplitObject(combined, split.by = 'orig.ident')
 
-saveRDS(seurat_list, 'split_slim_combined.rds')
+saveRDS(seurat_list, 'split_slim_combined_nih.rds')
 
 rm(combined)
+
+# seurat_list <- readRDS('split_slim_combined_nih.rds')
 
 # Preprocessing function  ---------------------------
 preprocess <- function(dgCMatrix, meta){
@@ -107,7 +113,7 @@ meta.naive <- seurat_list$naive@meta.data[c('celltype')]
 cc_naive <- preprocess(data.naive, meta.naive)
 
 rm(data.naive)
-saveRDS(cc_naive, 'cc_naive_05042021.rds')
+saveRDS(cc_naive, 'cc_naive_06222021.rds')
 
 # > Visualize  ---------------------------
 groupSize <- as.numeric(table(cc_naive@idents))
@@ -124,6 +130,7 @@ netVisual_circle(cc_naive@net$weight, vertex.weight = groupSize, top = 0.1, weig
 # Subsetted big networks: Secteted, cell-cell, and ECM
 # Define a function to subset the pathways for visualization purposes
 path_sub <- function(ref, total = pathways.show){
+  CellChatDB <- CellChatDB.mouse
   db_sub <- subsetDB(CellChatDB, search = ref)
   path_names <- unique(db_sub[["interaction"]][["pathway_name"]])
   path_intersect <- intersect(path_names, total)
@@ -178,14 +185,14 @@ netVisual_heatmap(cc_naive, signaling = pathways.show, color.heatmap = "Reds")
 #> Do heatmap based on a single object
 
 # > Identify Signaling Roles  ---------------------------
-# cc_naive <- readRDS('cc_naive_05042021.rds')
+# cc_naive <- readRDS('cc_naive_06222021.rds')
 
 # Compute the network centrality scores
 cc_naive <- netAnalysis_computeCentrality(cc_naive, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_naive, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_naive, 'cc_naive_network_05052021.rds')
+saveRDS(cc_naive, 'cc_naive_network_06222021.rds')
 
 rm(cc_naive)
 
@@ -194,7 +201,7 @@ data.p4 <- GetAssayData(object = seurat_list$p4, assay = 'SCT', slot = "data")
 meta.p4 <- seurat_list$p4@meta.data[c('celltype')]
 cc_p4 <- preprocess(data.p4, meta.p4)
 
-rm(data.p4, meta.p4); saveRDS(cc_p4, 'cc_p4_05042021.rds')
+rm(data.p4, meta.p4); saveRDS(cc_p4, 'cc_p4_06222021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_p4@idents))
@@ -227,14 +234,14 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_p4, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_p4 <- readRDS('cc_p4_05042021.rds')
+# cc_p4 <- readRDS('cc_p4_06222021.rds')
 
 # Compute the network centrality scores
 cc_p4 <- netAnalysis_computeCentrality(cc_p4, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_p4, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_p4, 'cc_p4_network_05052021.rds')
+saveRDS(cc_p4, 'cc_p4_network_06222021.rds')
 
 rm(cc_p4)
 
@@ -243,7 +250,7 @@ data.mp4 <- GetAssayData(object = seurat_list$mp4, assay = 'SCT', slot = "data")
 meta.mp4 <- seurat_list$mp4@meta.data[c('celltype')]
 cc_mp4 <- preprocess(data.mp4, meta.mp4)
 
-rm(data.mp4, meta.mp4); saveRDS(cc_mp4, 'cc_mp4_05042021.rds')
+rm(data.mp4, meta.mp4); saveRDS(cc_mp4, 'cc_mp4_06222021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_mp4@idents))
@@ -276,14 +283,14 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_mp4, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_mp4 <- readRDS('cc_mp4_05042021.rds')
+# cc_mp4 <- readRDS('cc_mp4_06222021.rds')
 
 # Compute the network centrality scores
 cc_mp4 <- netAnalysis_computeCentrality(cc_mp4, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_mp4, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_mp4, 'cc_mp4_network_05052021.rds')
+saveRDS(cc_mp4, 'cc_mp4_network_06222021.rds')
 
 rm(cc_mp4)
 
@@ -292,7 +299,7 @@ data.p24 <- GetAssayData(object = seurat_list$p24, assay = 'SCT', slot = "data")
 meta.p24 <- seurat_list$p24@meta.data[c('celltype')]
 cc_p24 <- preprocess(data.p24, meta.p24)
 
-rm(data.p24, meta.p24); saveRDS(cc_p24, 'cc_p24_05042021.rds')
+rm(data.p24, meta.p24); saveRDS(cc_p24, 'cc_p24_06222021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_p24@idents))
@@ -325,14 +332,14 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_p24, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_p24 <- readRDS('cc_p24_05042021.rds')
+# cc_p24 <- readRDS('cc_p24_06222021.rds')
 
 # Compute the network centrality scores
 cc_p24 <- netAnalysis_computeCentrality(cc_p24, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_p24, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_p24, 'cc_p24_network_05052021.rds')
+saveRDS(cc_p24, 'cc_p24_network_06222021.rds')
 
 rm(cc_p24)
 
@@ -341,7 +348,7 @@ data.mp24 <- GetAssayData(object = seurat_list$mp24, assay = 'SCT', slot = "data
 meta.mp24 <- seurat_list$mp24@meta.data[c('celltype')]
 cc_mp24 <- preprocess(data.mp24, meta.mp24)
 
-rm(data.mp24, meta.mp24); saveRDS(cc_mp24, 'cc_mp24_05042021.rds')
+rm(data.mp24, meta.mp24); saveRDS(cc_mp24, 'cc_mp24_06222021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_mp24@idents))
@@ -374,24 +381,24 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_mp24, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_mp24 <- readRDS('cc_mp24_05042021.rds')
+# cc_mp24 <- readRDS('cc_mp24_06222021.rds')
 
 # Compute the network centrality scores
 cc_mp24 <- netAnalysis_computeCentrality(cc_mp24, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_mp24, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_mp24, 'cc_mp24_network_05052021.rds')
+saveRDS(cc_mp24, 'cc_mp24_network_06222021.rds')
 
 rm(cc_mp24)
 
 # CCL-CCR Signaling  ---------------------------
 
-cc_naive <- readRDS('cc_naive_network_05052021.rds')
-cc_p4 <- readRDS('cc_p4_network_05052021.rds')
-cc_mp4 <- readRDS('cc_mp4_network_05052021.rds')
-cc_p24 <- readRDS('cc_p24_network_05052021.rds')
-cc_mp24 <- readRDS('cc_mp24_network_05052021.rds')
+cc_naive <- readRDS('cc_naive_network_06222021.rds')
+cc_p4 <- readRDS('cc_p4_network_06222021.rds')
+cc_mp4 <- readRDS('cc_mp4_network_06222021.rds')
+cc_p24 <- readRDS('cc_p24_network_06222021.rds')
+cc_mp24 <- readRDS('cc_mp24_network_06222021.rds')
 
 pathways.show <- c('CCL')
 
@@ -404,7 +411,7 @@ for (i in 1:length(cc_list)){
                                              title = trtList[[i]])
 }
 cowplot::plot_grid(plotlist = plot_list, ncol = 5)
-ggsave('CCL_CCR_signaling_netAnalysis.png', width = 15, height = 4)
+ggsave('CCL_CCR_signaling_netAnalysis_nih.png', width = 15, height = 4)
 
 pairLR.CCL <- extractEnrichedLR(cc_naive, signaling = pathways.show, 
                                 geneLR.return = FALSE)
@@ -423,10 +430,19 @@ gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5), meas
 gg1 + gg2
 ggsave('interactions_compared.png', width = 10, height = 5)
 
-# Will compare 1,2
+# Will compare 1,2 and 1,3 for 4 hour treatments
 par(mfrow = c(1,2), xpd=TRUE)
-netVisual_diffInteraction(cellchat, weight.scale = T, top = 0.1)
 netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+#netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+netVisual_diffInteraction(cellchat, comparison = c(1,3), weight.scale = T, measure = "weight", top = 0.1)
+
+# Will compare 1,4 and 1,5 for 24 hour treatments
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_diffInteraction(cellchat, comparison = c(1,4), weight.scale = T, measure = "weight", top = 0.1)
+#netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+netVisual_diffInteraction(cellchat, comparison = c(1,5), weight.scale = T, measure = "weight", top = 0.1)
+
+# these should be best exported as legal paper pdfs in Rstudio
 
 # Will compare 1,4
 par(mfrow = c(1,2), xpd=TRUE)
@@ -434,6 +450,11 @@ netVisual_diffInteraction(cellchat, weight.scale = T, top = 0.1,
                           comparison = c(1,4))
 netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight",
                           top = 0.1, comparison = c(1,4))
+
+
+
+
+
 
 weight.max <- getMaxWeight(object.list, attribute = c("idents","count"))
 par(mar=c(1,1,1,1))

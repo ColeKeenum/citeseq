@@ -1,6 +1,6 @@
 # Load packages -------------
 library(Seurat)
-library(dplyr)
+library(dplyr) # for pipe
 
 getwd()
 setwd('C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data/DBKERO scRNA scATAC')
