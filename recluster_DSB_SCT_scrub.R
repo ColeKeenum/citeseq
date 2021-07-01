@@ -2372,6 +2372,7 @@ ggsave('N_AM_GSEA_dot_plot.png', width = 12.5, height = 5)
 
 # Important Violin and Feature Plots ----
 # combined <- readRDS('combined_04_25_2021c.rds')
+# combined <- readRDS('combined_NIH_06222021.rds')
 
 combined@meta.data$orig.ident <-
   factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))

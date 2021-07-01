@@ -1,4 +1,6 @@
-# First determine doublet scores with Scrublet
+# First determine doublet scores with Scrublet:
+# 1-scrublet_and_QC_citeseq.R
+# Then run this script.
 library(dsb)
 library(Seurat)
 library(tidyverse)
@@ -73,7 +75,7 @@ rm(mp24, mp4, naive, p4, p24)
 prot_filt <- filt[['ADT']]@counts
 saveRDS(prot_filt, 'prot_filt.rds')
 
-# Apply DSB normalization to merged matrices: : -----
+# Apply DSB normalization to merged matrices: -----
 rna <- readRDS('rna_merged.rds')
 prot <- readRDS('prot_merged.rds')
 prot_filt <- readRDS('prot_filt.rds')
@@ -81,6 +83,7 @@ prot_filt <- readRDS('prot_filt.rds')
 stained_cells <- colnames(prot_filt) # length = 29389
 background <- setdiff(colnames(rna), stained_cells) # length = 33945011
 
+# md dataframe from DSB vignette:
 rna_size = log10(Matrix::colSums(rna))
 prot_size = log10(Matrix::colSums(prot))
 ngene = Matrix::colSums(rna > 0)
@@ -145,6 +148,35 @@ negative_mtx_rawprot = negative_mtx_rawprot[!(prot_names == 'DR3-TotalA' | prot_
                                                 prot_names == "CD115-TotalA"), ]
 dim(negative_mtx_rawprot)
 
+# Adding Scrublet doublets to md:
+scrub_naive <- read.csv('./Scrublet outputs/scrublet_output_naive_colnames.csv', row.names = 'X')
+scrub_p4 <- read.csv('./Scrublet outputs/scrublet_output_p4_colnames.csv', row.names = 'X')
+scrub_p24 <- read.csv('./Scrublet outputs/scrublet_output_p24_colnames.csv', row.names = 'X')
+scrub_mp4 <- read.csv('./Scrublet outputs/scrublet_output_mp4_colnames.csv', row.names = 'X')
+scrub_mp24 <- read.csv('./Scrublet outputs/scrublet_output_mp24_colnames.csv', row.names = 'X')
+
+rownames(scrub_naive) <- paste('naive_', rownames(scrub_naive), sep = '')
+rownames(scrub_p4) <- paste('p4_', rownames(scrub_p4), sep = '')
+rownames(scrub_p24) <- paste('p24_', rownames(scrub_p24), sep = '')
+rownames(scrub_mp4) <- paste('mp4_', rownames(scrub_mp4), sep = '')
+rownames(scrub_mp24) <- paste('mp24_', rownames(scrub_mp24), sep = '')
+
+scrub_md <- rbind(scrub_naive, scrub_p4, scrub_p24, scrub_mp4, scrub_mp24) %>% 
+  filter(predicted_doublet == 'False')
+
+singlets <- intersect(colnames(cells_mtx_rawprot), rownames(scrub_md))
+length(singlets)
+
+dim(cells_mtx_rawprot)
+cells_mtx_rawprot <- cells_mtx_rawprot[, singlets]
+dim(cells_mtx_rawprot)
+
+# dim(cells_mtx_rawprot)
+# cells_mtx_rawprot <- select(as.data.frame(cells_mtx_rawprot), all_of(singlets))
+# dim(cells_mtx_rawprot)
+
+dim(negative_mtx_rawprot)
+
 #normalize protein data for the cell containing droplets with the dsb method. 
 dsb_norm_prot = DSBNormalizeProtein(
   cell_protein_matrix = cells_mtx_rawprot, 
@@ -156,9 +188,10 @@ dsb_norm_prot = DSBNormalizeProtein(
 
 dsb_norm_prot = apply(dsb_norm_prot, 2, function(x){ ifelse(test = x < -10, yes = 0, no = x)}) 
 
+# Find doublets via ADT expression: ----
 # filter raw protein, RNA and metadata to only include cell-containing droplets 
-cells_rna = rna[ ,positive_cells]
-md2 = md[positive_cells, ]
+cells_rna = rna[ ,colnames(cells_mtx_rawprot)]
+md2 = md[colnames(cells_mtx_rawprot), ]
 
 # create Seurat object !note: min.cells is a gene filter, not a cell filter
 s = Seurat::CreateSeuratObject(counts = cells_rna, meta.data = md2, 
@@ -173,7 +206,118 @@ prots = rownames(s@assays$CITE@data)[c(1:16, 20:183)]
 s = FindNeighbors(object = s, dims = NULL, assay = 'CITE', 
                   features = prots, k.param = 30, verbose = FALSE)
 
-# direct graph clustering 
+# direct graph clustering: overcluster to find doublets
+s = FindClusters(object = s, resolution = 2.5, algorithm = 3, graph.name = 'CITE_snn', verbose = FALSE)
+
+# umap for visualization only; (this is optional)
+s = RunUMAP(object = s, assay = "CITE", features = prots, seed.use = 1990,
+            min.dist = 0.2, n.neighbors = 30, verbose = FALSE)
+
+# make results dataframe 
+d = cbind(s@meta.data, as.data.frame(t(s@assays$CITE@data)), s@reductions$umap@cell.embeddings)
+
+# calculate the median protein expression separately for each cluster 
+adt_plot = d %>% 
+  dplyr::group_by(CITE_snn_res.1) %>% 
+  dplyr::summarize_at(.vars = prots, .funs = median) %>% 
+  tibble::remove_rownames() %>% 
+  tibble::column_to_rownames("CITE_snn_res.1") 
+
+# plot a heatmap of the average dsb normalized values for each cluster
+p <- pheatmap::pheatmap(t(adt_plot), 
+                   color = viridis::viridis(25, option = "B"), 
+                   scale = 'row',
+                   fontsize_row = 8, border_color = NA)
+ggsave('pheatmap_ADT_cluster.pdf', plot = p, width = 8.5, height = 18)
+
+p <- Seurat::DimPlot(s, reduction = 'umap')
+ggsave('ADT_dimplot.png', plot = p, width = 5, height = 5)
+
+Seurat::FeaturePlot(s, features = c('CD3-TotalA', 'CD8a-TotalA', 'CD4-TotalA'), min.cutoff = 0,
+                    max.cutoff = 'q99')
+
+# Quick normalization just for visualization
+DefaultAssay(s) = "RNA"
+s = NormalizeData(s, verbose = FALSE) %>% 
+  FindVariableFeatures(selection.method = 'vst', verbose = FALSE) %>% 
+  ScaleData(verbose = FALSE) %>%
+  RunPCA(verbose = FALSE)
+
+# Plot all ADTs:
+# Will select only the good ones and then recluster
+DefaultAssay(s) <- 'CITE'
+protein.to.plot <- rownames(s)
+library(readxl)
+ADT_with_associated_genes <- read_excel("Y:/Cole Keenum/CITE-seq files/ADT_with_associated_genes.xlsx")
+
+bad_adt <- setdiff(ADT_with_associated_genes$Protein, protein.to.plot)
+length(bad_adt)
+
+idx <-  ADT_with_associated_genes$Protein %in% bad_adt
+ADT_with_associated_genes <- ADT_with_associated_genes[!idx, ]
+
+genes.to.plot <- ADT_with_associated_genes$Gene1
+
+# with a 99% quartile cutoff for ADT
+for (i in 1:length(x = protein.to.plot)){
+  protein <- protein.to.plot[[i]]
+  gene <- genes.to.plot[[i]]
+  DefaultAssay(s) <- "CITE"
+  p1 <- FeaturePlot(s, features = protein, cols = c("lightgrey","darkgreen"),
+                    min.cutoff = 0, max.cutoff = 'q99')
+  DefaultAssay(s) <- "RNA"
+  p2 <- FeaturePlot(s, features = gene, reduction = 'umap')
+  filename <- paste("adtFeaturePlot_", protein, ".png", sep = "")
+  filename <- gsub("/",  "", filename)
+  filename <- gsub("-TotalA",  "", filename)
+  ggsave(filename = filename, plot = p1 | p2,  width = 10, height = 5)
+}
+
+DimPlot(s, reduction = 'umap', label = T) + NoLegend()
+
+DefaultAssay(s) <- "CITE"
+combined.markers <- FindAllMarkers(s, only.pos = TRUE, 
+                                   min.pct = 0.25, logfc.threshold = 0, 
+                                   max.cells.per.ident = Inf)
+top10 <- combined.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+# Note: a p-value = 0 in the following is rounded due to truncation after 1E-300
+write.csv(combined.markers, file = "CITE_ADT_markers.csv", row.names = FALSE)
+
+
+# Remove obvious doublets: 41, 42
+dim(s)
+s <- subset(s, idents = c('41', '42'), invert = T)
+dim(s)
+
+# Remove low-staining or non-staining ADT ----
+adt_data <- s[['CITE']]@data
+
+library(readxl)
+bad_adts <- read_excel("Y:/Cole Keenum/CITE-seq files/2021-06-30 Bad ADT List V5.xlsx")
+bad_adts <- bad_adts$`DSB-Final`
+for (i in 1:length(bad_adts)){bad_adts[[i]] <- paste(bad_adts[[i]], "-TotalA", sep = "")}
+
+setdiff(bad_adts, rownames(adt_data))
+intersect(bad_adts, rownames(adt_data))
+
+idx <- match(rownames(adt_data), bad_adts)
+idx <- which(is.na(idx))
+
+dim(adt_data)
+adt_data <- adt_data[-which(rownames(adt_data) %in% bad_adts), ]
+dim(adt_data)
+
+# Apply clustering with removed poor ADTs ----
+# re-creating ADT assay
+s[["CITE"]] = Seurat::CreateAssayObject(data = adt_data)
+
+# cluster and run umap (based directly on dsb normalized values without istype controls )
+prots = rownames(s@assays$CITE@data)[c(1:14, 18:120)]
+
+s = FindNeighbors(object = s, dims = NULL, assay = 'CITE', 
+                  features = prots, k.param = 30, verbose = FALSE)
+
+# direct graph clustering: overcluster to find doublets
 s = FindClusters(object = s, resolution = 1, algorithm = 3, graph.name = 'CITE_snn', verbose = FALSE)
 
 # umap for visualization only; (this is optional)
@@ -191,24 +335,16 @@ adt_plot = d %>%
   tibble::column_to_rownames("CITE_snn_res.1") 
 
 # plot a heatmap of the average dsb normalized values for each cluster
-pheatmap::pheatmap(t(adt_plot), 
-                   color = viridis::viridis(25, option = "B"), 
-                   fontsize_row = 8, border_color = NA)
-ggsave('pheatmap_ADT_cluster.png', width = 7.5, height = 10)
+p <- pheatmap::pheatmap(t(adt_plot), 
+                        color = viridis::viridis(25, option = "B"), 
+                        scale = 'row',
+                        fontsize_row = 8, border_color = NA)
+ggsave('pheatmap_ADT_cluster_120.pdf', plot = p, width = 8.5, height = 18)
 
-Seurat::DimPlot(s)
-Seurat::FeaturePlot(s, features = 'CD4-TotalA')
+p <- Seurat::DimPlot(s, reduction = 'umap')
+ggsave('ADT_dimplot_120.png', plot = p, width = 5, height = 5)
 
-VlnPlot(s, features = 'prot_size', group.by = 'orig.ident')
-ggsave('prot_size.png', width = 7.5, height = 5)
+dsb_singlets <- s[['CITE']]@data
 
-VlnPlot(s, features = 'nFeature_RNA', group.by = 'orig.ident')
-ggsave('rna_size.png', width = 7.5, height = 5)
-
-VlnPlot(s, features = 'CD200-TotalA', split.by = 'orig.ident')
-ggsave('prot_size.png', width = 7.5, height = 5)
-
-
-
-# Try scrublet values
-# Confirm ADT densities
+saveRDS(dsb_singlets, 'dsb_singlets.rds')
+saveRDS(s, 'seurat_obj_dsb_qc.rds')
