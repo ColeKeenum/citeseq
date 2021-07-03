@@ -1,15 +1,11 @@
 # NOTES ---------------------------
 # CITE-Seq Analysis of Lung Cells w/ PUUC and MPLA+PUUC at 4 and 24 hour
-# 1. Used SCTransform to get better sequencing results
-# 2. Scrublet to remove putative doublets
-# 3. Applied outlier analysis to ADT reads as well (removed ~250 cells)
-# 4. Used DSB method of normalization for ADT data (V2 as of 04152021)
-# 5. Regressed out cell cycle gene effect for SCT scaling
+# 1. Improved Scrublet to remove putative doublets conservatively
+# 2. Used DSB method of normalization for ADT data incorporating isotype ctrls
+# 3. Applied QC filters based on DSB tutorials
+# 4. This script is for SCTransform, clustering, and generating DEGs w/ Seurat
 
-# NEED TO  ---------------------------
-# 1. Consider regressing out dissociation-induced genes
-
-# Load Packages  ---------------------------
+# Load Packages and Parallelize ---------------------------
 library(dplyr)
 library(Seurat)
 library(patchwork)
@@ -18,188 +14,60 @@ library(RColorBrewer)
 library(ggrepel)
 library(cowplot)
 library(Matrix)
-## For a more efficient WRST (optional):
-library(BiocManager)
-## For plotting
-library("dittoSeq")
-# paralelizing
+library(BiocManager) # For a more efficient WRST (optional):
 library(future)
-plan("multicore")
+
+plan()
 
 # Load Data  ---------------------------
-
-# new PC-based QC
 setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
 # setwd("C:/Users/UPDATE/Desktop/COVID Lung CITE-Seq")
 
-# seuratObj <- readRDS("seuratObj_RNA_ADT.rds")
-seuratObj <- readRDS("seuratObj_scrub_mtQC_adtQC.rds")
+# Read filtered RNA data
+path_data <- "Y:/Cole Keenum/CITE-seq files" # will be slow
 
-# Add dsb-Normalized ADTs ---------------------------
-dsb <- readRDS('dsb_seurat_obj.rds')
-dsb <- dsb@assays[["CITE"]]@data
-dsb <- as(dsb, 'sparseMatrix')
-overlap_cells <- intersect(colnames(dsb), colnames(seuratObj))
-dsb <- dsb[ , overlap_cells]
-seuratObj <- SetAssayData(seuratObj, slot = 'data', new.data = dsb, assay = 'ADT')
+mp4 <- Read10X(paste0(path_data,"/mp4hr10xdata/outs/filtered_feature_bc_matrix/"))[["Gene Expression"]]
+mp24 <- Read10X(paste0(path_data,"/mp24hr10xdata/mp24hr10xdata/outs/filtered_feature_bc_matrix/"))[["Gene Expression"]]
+p4 <- Read10X(paste0(path_data,"/p4hr10xdata/p4hr10xdata/outs/filtered_feature_bc_matrix/"))[["Gene Expression"]]
+p24 <- Read10X(paste0(path_data,"/p24hr10xdata/p24hr10xdata/outs/filtered_feature_bc_matrix/"))[["Gene Expression"]]
+naive <- Read10X(paste0(path_data,"/naive10xdata/outs/filtered_feature_bc_matrix/"))[["Gene Expression"]]
 
-# Remove bad ADTs (does not remove high-responders) ---------------------------
-adt_counts <- seuratObj[['ADT']]@counts
-adt_data <- seuratObj[['ADT']]@data
+mp4 <- CreateSeuratObject(counts = mp4, project = "mp4", assay = "RNA")
+mp24 <- CreateSeuratObject(counts = mp24, project = "mp24", assay = "RNA")
+p4 <- CreateSeuratObject(counts = p4, project = "p4", assay = "RNA")
+p24 <- CreateSeuratObject(counts = p24, project = "p24", assay = "RNA")
+naive <- CreateSeuratObject(counts = naive, project = "naive", assay = "RNA")
 
-all(rownames(adt_counts) == rownames(adt_data))
-all(colnames(adt_counts) == colnames(adt_data))
+seuratObj <- merge(naive, c(p4, p24, mp4, mp24),
+              add.cell.ids = c("naive", "p4", "p24", "mp4", "mp24"))
+dim(seuratObj) # [1] 32285 29389
+rm(mp24, mp4, naive, p4, p24)
 
-library(readxl)
-bad_adts <- read_excel("Y:/Cole Keenum/CITE-seq files/2021-04-17 Bad ADT List V4.xlsx")
-bad_adts <- bad_adts$`DSB-Final`
-for (i in 1:length(bad_adts)){bad_adts[[i]] <- paste(bad_adts[[i]], "-TotalA", sep = "")}
+# Bring in Normalized DSB values with names for QC-filtered cells
+dsb_data <- as.sparse(readRDS('dsb_singlets.rds'))
 
-setdiff(bad_adts, rownames(adt_counts))
+dim(dsb_data) # [1]   120 26935
+length(intersect(colnames(dsb_data), colnames(seuratObj))) # [1] 26935
 
-idx <- match(rownames(adt_counts), bad_adts)
-idx <- which(is.na(idx))
+seuratObj <- subset(seuratObj, cells = colnames(dsb_data))
+dim(seuratObj) # [1] 32285 26935
+seuratObj[['ADT']] <- CreateAssayObject(data = dsb_data)
 
-adt_counts <- adt_counts[idx, ]
-adt_data <- adt_data[idx, ]
+# Rearranging metadata for downstream plotting:
+seuratObj@meta.data$orig.ident <-
+  factor(x = seuratObj@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 
-all(rownames(adt_counts) == rownames(adt_data))
-all(colnames(adt_counts) == colnames(adt_data))
+# Bring in scrublet_score metadata and apply to seurat object:
+scrub_md <- read.csv('scrublet_metadata.csv') %>% filter(X %in% colnames(seuratObj))
+all(scrub_md$X==colnames(seuratObj)) # [1] TRUE
+any(scrub_md$predicted_doublet=='True') # [1] FALSE
 
-# re-creating ADT assay
-seuratObj[['ADT']] <- NULL
-seuratObj[['ADT']] <- CreateAssayObject(counts = adt_counts)
-seuratObj <- SetAssayData(seuratObj, slot = 'data', 
-                          new.data = adt_data, assay = 'ADT')
-dim(seuratObj[['ADT']])
+seuratObj <- AddMetaData(object = seuratObj, 
+                         metadata = scrub_md$doublet_score,
+                         col.name = 'doublet_score')
 
-rm(adt_counts, adt_data, bad_adts, i, idents, idx, test)
-
-# Make a list of Seurat objects ---------------------------
-seurat_list <- SplitObject(seuratObj, split.by = "orig.ident")
-rm(seuratObj, dsb, overlap_cells)
-
-dim(seurat_list[[1]][['ADT']])
-
-# Run Quick ADT Integration and Visualization ---------------------------
-# Determine if the removel of ADTs were successful, see if there are any very
-# high responsing
-
-for (i in 1:length(x = seurat_list)){
-  DefaultAssay(seurat_list[[i]]) = "ADT"
-  VariableFeatures(seurat_list[[i]]) <- rownames(seurat_list[[i]][["ADT"]]) #select all ADT as variable features
-  # DSB ALREADY NORMALIZED
-  # seurat_list[[i]] <- NormalizeData(seurat_list[[i]], normalization.method = 'CLR', margin = 2) #CLR normalization for ADT
-}
-
-# Finding integration anchors for ADT
-anchorsADT <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30) # may need to alter dims
-combinedADT <- IntegrateData(anchorset = anchorsADT, dims = 1:30, new.assay.name = "integratedADT_")
-
-#I am not sure if this is a good idea:
-# combined_clean[["integratedADT_"]] <- combinedADT[["integratedADT_"]] 
-
-rm(anchorsADT, seurat_list)
-
-# TEST Visualize ADT Clustering ---------------------------
-# aPCA on ADT
-DefaultAssay(combinedADT) <- 'integratedADT_'
-combinedADT <- ScaleData(combinedADT)
-combinedADT <- RunPCA(combinedADT, reduction.name = 'apca')
-ElbowPlot(combinedADT, ndims = 30, reduction = "apca") # true dimensionality ~13, may be low
-ggsave("TEST120_elbow_plot_dsb_adt_scrub.png")
-
-combinedADT <- RunUMAP(combinedADT, reduction = 'apca', dims = 1:15, assay = 'ADT', 
-                          reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
-
-combinedADT <- FindNeighbors(combinedADT, reduction = 'apca', dims = 1:15,
-                                graph.name = 'adt.snn')
-combinedADT <- FindClusters(combinedADT, graph.name = 'adt.snn', resolution = 1.0, verbose = T)
-
-Idents(combinedADT) <- 'adt.snn_res.1'
-DimPlot(combinedADT, reduction = 'adt.umap', label = TRUE, repel = TRUE, 
-        label.size = 2.5) + NoLegend()
-ggsave("TEST120_SCT_or_ADT_only_clustering_DSB_SCT_scrub.png", width = 5, height = 5)
-
-DefaultAssay(combinedADT) <- "ADT"
-FeaturePlot(combinedADT, features = c("CD4-TotalA", "CD8a-TotalA","CD8b-TotalA"),
-            reduction = 'adt.umap', 
-            cols = c("lightgrey","darkgreen"), ncol = 3, min.cutoff=0,
-            max.cutoff = "q99")
-ggsave("TEST120_T_cell_markers_DSB_120_0q99.png", width = 15, height = 5)
-
-VlnPlot(combinedADT, features = 'nFeature_ADT') + NoLegend()
-ggsave('vln_plot_some_high_responders.png', width = 10, height = 5)
-
-DefaultAssay(combinedADT) <- "ADT"
-FeaturePlot(combinedADT, features = c("ESAM-TotalA", "CD309-TotalA","CD326-TotalA"),
-            reduction = 'adt.umap', 
-            cols = c("lightgrey","darkgreen"), ncol = 3, min.cutoff=0,
-            max.cutoff = "q99")
-ggsave("TEST120_EpiEndo_cell_markers_DSB_120_0q99.png", width = 15, height = 5)
-
-DefaultAssay(combinedADT) <- "ADT"
-FeaturePlot(combinedADT, features = c("IgD-TotalA", "CD45R-TotalA","CD21/35-TotalA"),
-            reduction = 'adt.umap', 
-            cols = c("lightgrey","darkgreen"), ncol = 3, min.cutoff=0,
-            max.cutoff = "q99")
-ggsave("TEST120_B_cell_markers_DSB_120_0q99.png", width = 15, height = 5)
-
-DefaultAssay(combinedADT) <- "ADT"
-FeaturePlot(combinedADT, features = c("CD24-TotalA", "CD11b-TotalA", "Ly6g.Ly6c-TotalA"),
-            reduction = 'adt.umap', 
-            cols = c("lightgrey","darkgreen"), ncol = 3, min.cutoff=0,
-            max.cutoff = "q99")
-ggsave("TEST120_neutro_markers_DSB_120_0q99.png", width = 15, height = 5)
-
-dim(combinedADT)
-dim(subset(combinedADT, idents = c('16', '19'))) # putative high-responders
-
-# TEST Visualize ADT Clustering ---------------------------
-DefaultAssay(combinedADT) <- "ADT"
-combinedADT.markers <- FindAllMarkers(combinedADT, only.pos = TRUE, 
-                                 min.pct = 0.25, logfc.threshold = 0.6, 
-                                 max.cells.per.ident = Inf)
-top10 <- combinedADT.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
-# Note: a p-value = 0 in the following is rounded due to truncation after 1E-300
-write.csv(top10, file = "combinedADT_cluster_biomarkers_v2.csv", row.names = FALSE)
-
-## Plotting top 5 marker genes on heatmap: 
-
-# sketchy?
-combinedADT <- ScaleData(combinedADT, assay = 'ADT')
-
-Idents(combinedADT) <- 'adt.snn_res.1'
-top5 <- combinedADT.markers %>% group_by(cluster) %>% top_n(n = 5, wt = avg_log2FC)
-#uninfected_lung <- subset(combinedADT, subset = trt == "Uninfected")
-p <- DoHeatmap(subset(combinedADT, downsample = 100),
-               features = top5$gene, size = 3, angle = 30) + NoLegend()
-ggsave("combinedADT_top5_markers_heatmap_pre_high_remove.png", plot = p, width = 10, height = 6)
-
-top2 <- combinedADT.markers %>% group_by(cluster) %>% top_n(n = 2, wt = avg_log2FC)
-#uninfected_lung <- subset(combinedADT, subset = trt == "Uninfected")
-p <- DoHeatmap(subset(combinedADT, downsample = 100),
-               features = top2$gene, size = 3, angle = 30) + NoLegend()
-ggsave("combinedADT_top2_markers_heatmap_pre_high_remove.png", plot = p, width = 10, height = 6)
-
-# Remove High Responders and prep for final integration ---------------------------
-idents <- as.character(0:(length(unique(Idents(combinedADT)))-1))
-idents <- idents[-17] # removes ident 16
-idents <- idents[-19] # removes ident 19
-clean <- subset(combinedADT, idents = idents)
-
-dim(combinedADT)
-dim(clean)
-
-# Undo integratedADT assay
-clean[['integratedADT_']] <- NULL
-
-dim(seurat_list[[1]])
-seurat_list <- SplitObject(clean, split.by = "orig.ident")
-dim(seurat_list[[1]])
-
-# clean up memory
-rm(clean, combinedADT, combinedADT.markers, p, top10, top2, top5, idents, anchorsADT)
+seurat_list <- SplitObject(seuratObj, split.by = 'orig.ident')
+rm(dsb_data, scrub_md, seuratObj)
 
 # SCTransform ---------------------------
 for (i in 1:length(x = seurat_list)){
@@ -217,10 +85,10 @@ for (i in 1:length(x = seurat_list)){
                                                      "percent.globin",
                                                      "percent.mt",
                                                      "percent.Rpsl"), ncol = 4)
-  ggsave(paste(sample_id, "_QC", ".png", sep = ""), plot = qc_plot)
+  ggsave(paste(sample_id, "_QC_v3", ".png", sep = ""), plot = qc_plot)
   # Subsetting based on QC metrics:
   seurat_list[[i]] <- subset(seurat_list[[i]], subset = nFeature_RNA > 200 &
-                               percent.globin < 10 & predicted_doublet == 'False')
+                               percent.globin < 10)
   seurat_list[[i]] <- SCTransform(seurat_list[[i]],
                                   method = "glmGamPoi",
                                   vars.to.regress = "percent.mt",
@@ -229,8 +97,30 @@ for (i in 1:length(x = seurat_list)){
 }
 
 # Cell Cycle Scoring ---------------------------
-g2m_genes <- readRDS('g2m_genes.rds')
-s_genes <- readRDS('s_genes.rds')
+# From: https://www.r-bloggers.com/2016/10/converting-mouse-to-human-gene-names-with-biomart-package/
+# BiocManager::install("biomaRt")
+convertHumanGeneList <- function(x){
+  
+  require("biomaRt")
+  human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
+  mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
+  
+  genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
+  
+  humanx <- unique(genesV2[, 2])
+  
+  # Print the first 6 genes found to the screen
+  print(head(humanx))
+  return(humanx)
+}
+# Gene List from: https://science.sciencemag.org/content/352/6282/189
+# Tirosh et al. Science 2019
+s_genes <- convertHumanGeneList(cc.genes.updated.2019$s.genes)
+g2m_genes <- convertHumanGeneList(cc.genes.updated.2019$g2m.genes)
+
+# Save for later:
+write.csv(s_genes, 's_genes.csv'); write.csv(g2m_genes, 'g2m_genes.csv')
+
 for (i in 1:length(x = seurat_list)){ # I can move this into the above for loop...
   seurat_list[[i]] <- CellCycleScoring(seurat_list[[i]], g2m.features=g2m_genes, s.features=s_genes)
 }
@@ -248,8 +138,8 @@ anchors <- FindIntegrationAnchors(object.list = seurat_list, dims = 1:30,
 to_integrate <- SelectIntegrationFeatures(object.list = seurat_list, 
                                           nfeatures = 6000 , verbose = TRUE)
 
-# WORKSPACE SAVED HERE 04182021
-rm(seurat_list, qc_plot) # to conserve memory
+# Workspace saved here and moved to workstation computer
+# save.image("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data/pre_integration_workspace_07022021.RData")
 
 combined <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
                           features.to.integrate = to_integrate, verbose = T,
@@ -259,15 +149,20 @@ combined <- IntegrateData(anchorset = anchors, normalization.method = "SCT",
 # This will take some time. 
 combined <- ScaleData(combined, vars.to.regress = c("S.Score", "G2M.Score"))
 
-saveRDS(combined, 'combined_SCT_DSB120clean_pre_adt_integration.rds')
+saveRDS(combined, 'combined_integrated_SCT_07022021.rds')
 
 # ADT Integration ---------------------------
 seurat_list <- anchors@object.list
 
+# Identify the rows with isotype controls: exclude these from VariableFeatures
+rownames(seurat_list[[1]][["ADT"]])
+rownames(seurat_list[[1]][["ADT"]])[15:17] # [1] "IgG1-TotalA"  "IgG2-TotalA"  "IgG2b-TotalA"
+
 for (i in 1:length(x = seurat_list)){
   DefaultAssay(seurat_list[[i]]) = "ADT"
-  VariableFeatures(seurat_list[[i]]) <- rownames(seurat_list[[i]][["ADT"]]) #select all ADT as variable features
-  # DSB ALREADY NORMALIZED
+  VariableFeatures(seurat_list[[i]]) <- c(rownames(seurat_list[[i]][["ADT"]])[1:14],
+                                          rownames(seurat_list[[i]][["ADT"]])[18:120])
+  # Data already normalized with DSB
   # seurat_list[[i]] <- NormalizeData(seurat_list[[i]], normalization.method = 'CLR', margin = 2) #CLR normalization for ADT
 }
 
@@ -279,8 +174,7 @@ combinedADT <- IntegrateData(anchorset = anchorsADT, dims = 1:30, new.assay.name
 combined[["integratedADT_"]] <- combinedADT[["integratedADT_"]] 
 
 rm(combinedADT, anchorsADT, anchors, seurat_list)
-saveRDS(combined, "combined_integrated_DSB120clean.rds")
-# combined <- readRDS("combined_integrated_DSB_SCT_scrub.rds")
+saveRDS(combined, "combined_integrated_SCT_DSB_07022021.rds")
 
 # Separate RNA and ADT Clustering ---------------------------
 # PCA on SCT
@@ -289,19 +183,19 @@ all.genes <- rownames(combined)
 combined <- ScaleData(combined, features = all.genes)
 combined <- RunPCA(combined, verbose = T)
 ElbowPlot(combined, ndims = 50, reduction = 'pca') # will use 40 because SCT is more accurate 
-ggsave("elbow_plot_sct_dsb120clean.png")
+ggsave("elbow_plot_sct.png")
 
 # aPCA on ADT
 DefaultAssay(combined) <- 'integratedADT_'
 combined <- ScaleData(combined)
 combined <- RunPCA(combined, reduction.name = 'apca')
 ElbowPlot(combined, ndims = 30, reduction = "apca") # true dimensionality ~13, may be low
-ggsave("elbow_plot_dsb120clean.png")
+ggsave("elbow_plot_dsb.png")
 
-#Idents(combined) <- "old.ident"
+# Assess clustering qualities on SCT and ADT umap separately:
 combined <- RunUMAP(combined, reduction = 'pca', dims = 1:40, assay = 'SCT', 
                     reduction.name = 'sct.umap', reduction.key = 'sctUMAP_')
-combined <- RunUMAP(combined, reduction = 'apca', dims = 1:15, assay = 'ADT', 
+combined <- RunUMAP(combined, reduction = 'apca', dims = 1:11, assay = 'ADT', 
                     reduction.name = 'adt.umap', reduction.key = 'adtUMAP_')
 
 combined <- FindNeighbors(combined, reduction = 'pca', dims = 1:40, 
@@ -319,13 +213,14 @@ Idents(combined) <- 'adt.snn_res.1'
 p2 <- DimPlot(combined, reduction = 'adt.umap', label = TRUE,
               repel = TRUE, label.size = 2.5) + NoLegend()
 p1 + p2
-ggsave("SCT_or_ADT_only_clustering_DSB120.png", width = 10, height = 5)
+ggsave("SCT_or_ADT_only_clustering.png", width = 10, height = 5)
 
+# Plot metrics to see if celltypes cluster together:
 DefaultAssay(combined) <- 'ADT'
 FeaturePlot(combined, features = c('CD4-TotalA', 'CD8a-TotalA', 'CD8b-TotalA', 'TCRB-TotalA'), 
             reduction = 'adt.umap', cols = c("lightgrey","darkgreen"),
             min.cutoff = 0, max.cutoff = 'q99')
-ggsave('tcell_markers_adt_proj120.png', width = 10, height = 10)
+ggsave('tcell_markers_adt.png', width = 10, height = 10)
 
 FeaturePlot(combined, features = c('CD4-TotalA', 'CD8a-TotalA', 'CD8b-TotalA', 'TCRB-TotalA'), 
             reduction = 'sct.umap', cols = c("lightgrey","darkgreen"),
@@ -333,9 +228,7 @@ FeaturePlot(combined, features = c('CD4-TotalA', 'CD8a-TotalA', 'CD8b-TotalA', '
 ggsave('tcell_markers_sct_proj120.png', width = 10, height = 10)
 DefaultAssay(combined) <- 'integratedSCT_'
 
-DimPlot(subset(combined, idents = '17'), reduction = 'sct.umap')
-ggsave('ident17_on_sct_umap.png', width = 5, height = 5)
-
+# Plot doublet_score: NOTE-Each sample has a different threshold, so use caution
 FeaturePlot(combined, features = c('doublet_score'), reduction = 'sct.umap')
 ggsave('doublet_score_after_scrublet_sct_umap.png', width = 5, height = 5)
 
@@ -344,35 +237,19 @@ ggsave('doublet_score_after_scrublet_adt_umap.png', width = 5, height = 5)
 
 DimPlot(combined, reduction = 'sct.umap', label = T) + NoLegend()
 
-saveRDS(combined, 'combined_dsb120.rds')
-#combined <- readRDS('combined_dsb120.rds')
+saveRDS(combined, 'combined_PCA.rds')
 combined@assays$RNA <- NULL
-saveRDS(combined, 'combined_dsb120_NORNA.rds')
-# combined <- readRDS('combined_dsb120_NORNA.rds')
-
-
-# # NEED TO FIGURE OUT WHICH ADTs ARE GOOD
-# # TEST Subset out cluster 17 (17 based on adt only) ---------------------------
-# idents <- as.character(0:(length(unique(Idents(combined)))-1))
-# idents <- idents[-18] # removes ident 17
-# combined_clean <- subset(combined, idents = idents)
-
-## RUN: TEST_combined_clean.R script
+saveRDS(combined, 'combined_PCA_noRNA.rds')
 
 # WNN clustering ---------------------------
-# On the integrated RNA and integrated ADT data
-# Identify multimodal neighbors:
-
 combined <- FindMultiModalNeighbors(
   combined, reduction.list = list("pca", "apca"), 
   dims.list = list(1:40, 1:15), modality.weight.name = "SCT.weight")
 
-resolution.range <- seq(from = 0, to = 2.0, by = 0.1)
-
-# MATTER TO RUN UMAP FIRST? this is what they do in vignette
-# combined <- RunUMAP(combined, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+combined <- RunUMAP(combined, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
 
 # Find clusters using a range of resolutions
+resolution.range <- seq(from = 0, to = 3.0, by = 0.1)
 combined <- FindClusters(object = combined, graph.name = "wsnn",
                          reduction.name = "wnn.umap", algorithm = 3, 
                          resolution = resolution.range, verbose = T)
@@ -380,17 +257,18 @@ combined <- FindClusters(object = combined, graph.name = "wsnn",
 for (res in resolution.range){
   md <- paste("wsnn_res.", res, sep = "")
   Idents(combined) <- md
-  p <- DimPlot(combined, label = T, repel = T, label.size = 3) + NoLegend()
-  ggsave(paste("dimplot_", "res_", res, "_dsb120_v1.png", sep = ""), plot = p,
+  p <- DimPlot(combined, label = T, repel = T, label.size = 3, reduction = 'wnn.umap') + NoLegend()
+  ggsave(paste("dimplot_", "res_", res, ".png", sep = ""), plot = p,
          width = 5, height = 5)
 }
 
 # Plotting
 library(clustree)
 clustree(combined, prefix = "wsnn_res.")
-ggsave("clustree_output_wnn_dsb120.pdf", width = 9.5, height = 11*2)
+ggsave("clustree_output_wnn.pdf", width = 9.5, height = 11*3)
 
-combined <- RunUMAP(combined, nn.name = "weighted.nn", reduction.name = "wnn.umap", reduction.key = "wnnUMAP_")
+saveRDS(combined, 'combined_wnn.rds')
+
 res <- 1.5
 combined <- FindClusters(combined, graph.name = "wsnn", algorithm = 3, resolution = res, verbose = FALSE)
 
@@ -582,7 +460,7 @@ get_colors <- function(p, obj){
 color_df <- get_colors(p, combined)
 
 # plotting 100% stacked bar chart for cell type distribution by group:
-p <- dittoBarPlot(object = combined, var = combined@active.ident, group.by = "orig.ident",
+p <- dittoSeq::dittoBarPlot(object = combined, var = combined@active.ident, group.by = "orig.ident",
                   scale = c('percent'), color.panel = color_df$Color, 
                   x.labels.rotate = F, ylab = 'Fraction of Cells')
 p$data$grouping <- factor(x = p$data$grouping, levels = c("naive", "p4", "mp4", "p24", "mp24"))

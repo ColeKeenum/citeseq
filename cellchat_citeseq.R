@@ -92,9 +92,8 @@ preprocess <- function(dgCMatrix, meta){
   cellchat <- identifyOverExpressedInteractions(cellchat)
   cellchat <- projectData(cellchat, PPI.mouse) # used to be be PPI.human
   
-  # For later: consider using population.size = TRUE for probability computation
-  # Consider setting raw.use = FALSE to alleviate the dropout issue
-  cellchat <- computeCommunProb(cellchat, raw.use = FALSE)
+  # Setting population.size = TRUE because this is on unsorted single cells
+  cellchat <- computeCommunProb(cellchat, raw.use = FALSE, population.size = TRUE)
   # Filter out the cell-cell communication if there are only few number of cells in certain cell groups
   cellchat <- filterCommunication(cellchat, min.cells = 8)
   

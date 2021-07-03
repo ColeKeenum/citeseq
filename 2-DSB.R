@@ -161,8 +161,10 @@ rownames(scrub_p24) <- paste('p24_', rownames(scrub_p24), sep = '')
 rownames(scrub_mp4) <- paste('mp4_', rownames(scrub_mp4), sep = '')
 rownames(scrub_mp24) <- paste('mp24_', rownames(scrub_mp24), sep = '')
 
-scrub_md <- rbind(scrub_naive, scrub_p4, scrub_p24, scrub_mp4, scrub_mp24) %>% 
-  filter(predicted_doublet == 'False')
+scrub_md <- rbind(scrub_naive, scrub_p4, scrub_p24, scrub_mp4, scrub_mp24)
+write.csv(scrub_md, 'scrublet_metadata.csv')
+
+scrub_md <- filter(scrub_md, predicted_doublet == 'False')
 
 singlets <- intersect(colnames(cells_mtx_rawprot), rownames(scrub_md))
 length(singlets)
@@ -347,4 +349,3 @@ ggsave('ADT_dimplot_120.png', plot = p, width = 5, height = 5)
 dsb_singlets <- s[['CITE']]@data
 
 saveRDS(dsb_singlets, 'dsb_singlets.rds')
-saveRDS(s, 'seurat_obj_dsb_qc.rds')
