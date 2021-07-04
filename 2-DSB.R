@@ -121,7 +121,7 @@ prot_size_max = median(cellmd$prot_size) + (3*mad(cellmd$prot_size))
 positive_cells = cellmd[
   cellmd$prot_size > prot_size_min & 
     cellmd$prot_size < prot_size_max & 
-    cellmd$propmt < 0.25 &  
+    cellmd$propmt < 0.25 &  # 0.20
     cellmd$rna_size > rna_size_min & 
     cellmd$rna_size < rna_size_max, ]$bc
 cells_mtx_rawprot = as.matrix(prot[ , positive_cells])

@@ -1,37 +1,6 @@
 ## Identifying celltypes  ---------------------------
 format <- theme(axis.text.x = element_text(angle = 90))
 
-# Check this and compare to dsb
-# DefaultAssay(combined) <- "ADT"
-# VlnPlot(combined, features = c('IgG2-TotalA'))+NoLegend()
-# ggsave("IgG-TotalA_ADT_CLR_V2.png", width = 10, height=5)
-# VlnPlot(combined, features = c('IgG2-TotalA'), assay = "integratedADT_")+NoLegend()
-# ggsave("IgG-TotalA_ADTintegrated_CLR_V2.png", width = 10, height=5)
-
-# # Density Plots (Glioblastoma Paper Inspired) ---------------------------
-# # get dsb-normalized values
-# ADT_data_plotting<-as.data.frame(t( as.matrix(GetAssayData(combined, slot="data", assay="ADT"))))
-# ADT_data_plotting$orig.ident<-combined$orig.ident[rownames(ADT_data_plotting)]
-# ADT_data_plotting<-reshape2::melt(ADT_data_plotting)
-# #ADT_data_plotting <- ADT_data_plotting[sample(nrow(ADT_data_plotting), 5000), ]
-# colnames(ADT_data_plotting)[colnames(ADT_data_plotting)=="variable"]<-"protein"
-# 
-# # create list of individual dataframes for each ab:
-# ab_list <- as.character(unique(ADT_data_plotting$protein))
-# df_list <- vector(mode = "list", length = length(ab_list))
-# prot_list <- ADT_data_plotting$protein
-# for (i in 1:length(ab_list)){
-#   protein <- ab_list[[i]]
-#   df <- ADT_data_plotting[which(prot_list == protein), ]
-#   df_list[[i]] <- df
-#   ggplot(df_list[[i]],  aes(x=value,color=orig.ident, fill=orig.ident))+
-#     geom_density(alpha=0.2)+
-#     facet_wrap(~protein)+xlab("Arsinh geom counts")+
-#     geom_rug()
-#   filename <- gsub("/", "", paste(protein, "_density_plot_dsb.png"))
-#   ggsave(filename, width = 5, height = 5)
-# }
-# 
 ## Plot all antibodies on wnnUMAP  ---------------------------
 # Will select only the good ones and then recluster
 DefaultAssay(combined) <- "integratedADT_"
@@ -46,21 +15,6 @@ idx <-  ADT_with_associated_genes$Protein %in% bad_adt
 ADT_with_associated_genes <- ADT_with_associated_genes[!idx, ]
 
 genes.to.plot <- ADT_with_associated_genes$Gene1
-
-# # WITHOUT a 95% quartile cutoff for ADT
-# for (i in 1:length(x = protein.to.plot)){
-#   protein <- protein.to.plot[[i]]
-#   gene <- genes.to.plot[[i]]
-#   DefaultAssay(combined) <- "ADT"
-#   p1 <- FeaturePlot(combined, features = protein, cols = c("lightgrey","darkgreen"))
-#   DefaultAssay(combined) <- "SCT"
-#   p2 <- FeaturePlot(combined, features = gene)
-#   filename <- paste("FeaturePlot_", protein, ".png", sep = "")
-#   filename <- gsub("/",  "", filename)
-#   filename <- gsub("-TotalA",  "", filename)
-#   ggsave(filename = filename, plot = p1 | p2,  width = 10, height = 5)
-# }
-# DefaultAssay(combined) <- "integratedSCT_"
 
 # with a 99% quartile cutoff for ADT
 for (i in 1:length(x = protein.to.plot)){
@@ -79,7 +33,7 @@ for (i in 1:length(x = protein.to.plot)){
 }
 DefaultAssay(combined) <- "integratedSCT_"
 
-## Mouse cell atlas top10 markers  ---------------------------
+## Mouse cell atlas (MCA) top10 markers  ---------------------------
 
 # AT2 - 16
 markers.to.plot <-  c('Sftpc','Sftpa1','Sftpb','Lyz2','Cxcl15','Slc34a2','Lamp3',
@@ -704,13 +658,13 @@ ggsave('paramita_nonclassical_mono.png', width = 8.5, height = 7)
 
 # Plasma cells - N/A
 markers.to.plot <- c("Igj", "Mzb1", "Iglc2", "Prg2", "Eaf2", "Derl3", "Tnfrsf17", "Igkj2", "Txndc5", "Iglv3", "Oosp1")
-DotPlot(combined, assay = "RNA", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + 
+DotPlot(combined, assay = "SCT", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + 
   RotatedAxis()
 ggsave('paramita_plasma_cell.png', width = 8.5, height = 7)
 
 # Goblet cells - N/A (52 kinda)
 markers.to.plot <- c("Scgb3a1", "Reg3g", "Bpifb1", "Tff2", "Lypd2", "Sult1d1", "Ltf", "Muc5b", "Chad", "Pigr", "Bpifa1")
-DotPlot(combined, assay = "RNA", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + 
+DotPlot(combined, assay = "SCT", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + 
   RotatedAxis()
 ggsave('paramita_goblet.png', width = 8.5, height = 7)
 
@@ -842,13 +796,13 @@ DotPlot(combined, assay = "integratedSCT_", features  = markers.to.plot)
 # Neutrophil Markers ---------
 # Markers based on Zillionis paper
 markers.to.plot <- c('Mmp8', 'Ifit1', 'Cxcl3', 'Pald1', 'Ccl3', 'Ctsc')
-DefaultAssay(neutro) <- "SCT"
+DefaultAssay(combined) <- "SCT"
 for (marker in markers.to.plot){
-  FeaturePlot(neutro, features = marker, reduction = 'sct.umap')
+  FeaturePlot(combined, features = marker, reduction = 'wnn.umap')
   filename <- paste("neutro_FeaturePlot_", marker, ".png", sep = "")
   ggsave(filename = filename, width = 5, height = 5)
 }
-DefaultAssay(neutro) <- "integratedSCT_"
+DefaultAssay(combined) <- "integratedSCT_"
 
 # Zillionis dot plots
 # mN1
