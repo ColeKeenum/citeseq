@@ -224,15 +224,13 @@ combined <- FindClusters(combined, graph.name = "wsnn", algorithm = 3, resolutio
 
 # Data visualization:
 DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 4) + NoLegend()
-ggsave(paste("dimplot_", "res_", res, "_used.png", sep = ""), width = 5, height = 5)
-
-### ADD 0 CUTOFF TO ALL ADT VISUALIZATIONS ON FEATURE PLOT
+ggsave(paste("dimplot_", "res_", res, "_used_v2.png", sep = ""), width = 5, height = 5)
 
 FeaturePlot(combined, features = c('S.Score', 'G2M.Score'), reduction = 'wnn.umap', 
             min.cutoff = 0)
-ggsave('cell_cycle_scores.wnn.png', width = 10, height = 5)
+ggsave('cell_cycle_scores_v2.wnn.png', width = 10, height = 5)
 
-# Run: 3.1-cell_markers.R
+# Run: 4.1-cell_markers.R
 
 # Marker Genes for Unlabeled Clsuters ---------------------------
 ## Exporting top 10 marker genes:
@@ -241,212 +239,159 @@ combined.markers <- FindAllMarkers(combined, only.pos = TRUE,
                                  min.pct = 0.25, logfc.threshold = 0.6, 
                                  max.cells.per.ident = Inf)
 top10 <- combined.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
-# Note: a p-value = 0 in the following is rounded due to truncation after 1E-300
 write.csv(combined.markers, file = "gene_biomarkers_unlab.csv", row.names = FALSE)
-write.csv(top10, file = "gene_biomarkers_unlab_top10.csv", row.names = FALSE)
+write.csv(top10, file = "gene_biomarkers_unlab_top10_v2.csv", row.names = FALSE)
 
 DefaultAssay(combined) <- "ADT"
 combined.markers <- FindAllMarkers(combined, only.pos = TRUE, 
                                    min.pct = 0.25, logfc.threshold = 0.6, 
                                    max.cells.per.ident = Inf)
 top10 <- combined.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
-# Note: a p-value = 0 in the following is rounded due to truncation after 1E-300
 write.csv(combined.markers, file = "adt_biomarkers_unlab.csv", row.names = FALSE)
-write.csv(top10, file = "adt_biomarkers_unlab_top10.csv", row.names = FALSE)
-
-# Doublets: Cluster 39
-dim(combined)
-combined <- subset(combined, idents = c('39'), invert = TRUE)
-dim(combined)
-
-saveRDS(combined, 'combined_res1.5.rds')
+write.csv(top10, file = "adt_biomarkers_unlab_top10_v2.csv", row.names = FALSE)
 
 # Tables:
 unlab_freq <- table(combined@active.ident, col.names = combined$orig.ident)
 col_order <- c('naive', 'p4', 'mp4', 'p24', 'mp24')
 unlab_freq <- unlab_freq[ ,col_order]
-write.csv(unlab_freq, file = "unlab_freq.csv", row.names = T)
+write.csv(unlab_freq, file = "unlab_freq_v2.csv", row.names = T)
 
-# Suubsetting of T/NK cells ---------------------------
-tcells <- subset(combined, idents = c(7,8,13,15,17,27,30))
+# Need to go deeper on T/NK cell subcluster: ------
+resolution.range <- seq(from = 0, to = 3.0, by = 0.1)
+combined <- FindClusters(object = combined, graph.name = "wsnn",
+                         reduction.name = "wnn.umap", algorithm = 3, 
+                         resolution = resolution.range, verbose = T)
+Idents(combined) <- 'wsnn_res.1.5'
+
+tcells <- subset(combined, idents = c(6,8,13,14,23,26,27,38,39))
 DimPlot(tcells, reduction = 'wnn.umap', label = T) + NoLegend()
 # Go deeper into clustering resolution to separate CD4 and CD8 cells based on ADT
-Idents(tcells) <- "wsnn_res.3"
+Idents(tcells) <- "wsnn_res.3.3"
 DimPlot(tcells, reduction = 'wnn.umap', label = T) + NoLegend()
-ggsave('tcells_res3_wnnUMAP.png', width = 5, height = 5)
-
-DefaultAssay(tcells) <- 'SCT'
-plot <- FeaturePlot(tcells, features = "Tcrg-C1", reduction = 'wnn.umap')
-HoverLocator(plot = plot, information = FetchData(tcells, vars = c("ident")))
-DefaultAssay(tcells) <- 'integratedSCT_'
+ggsave('tcells_res3.3_wnnUMAP_v2.png', width = 5, height = 5)
 
 ## Exporting top 10 marker genes:
 DefaultAssay(tcells) <- "SCT"
 tcells.markers <- FindAllMarkers(tcells, only.pos = TRUE, 
-                                   min.pct = 0.25, logfc.threshold = 0.6, 
-                                   max.cells.per.ident = Inf)
-write.csv(tcells.markers, file = "tcells_gene_biomarkers_res3.csv", row.names = FALSE)
+                                 min.pct = 0.25, logfc.threshold = 0.6, 
+                                 max.cells.per.ident = Inf)
+write.csv(tcells.markers, file = "tcells_gene_biomarkers_res3.3_v2.csv", row.names = FALSE)
+
+## Exporting top 10 marker genes:
+DefaultAssay(tcells) <- "ADT"
+tcells.markers <- FindAllMarkers(tcells, only.pos = TRUE, 
+                                 min.pct = 0.25, logfc.threshold = 0.6, 
+                                 max.cells.per.ident = Inf)
+write.csv(tcells.markers, file = "tcells_adt_biomarkers_res3.3_v2.csv", row.names = FALSE)
+
+DefaultAssay(tcells) <- 'SCT'
+FeaturePlot(tcells, features = 'Cd3e', reduction = 'wnn.umap')
+FeaturePlot(tcells, features = 'Ccr7', reduction = 'wnn.umap')
+
+# Tables:
+unlab_freq <- table(tcells@active.ident, col.names = tcells$orig.ident)
+col_order <- c('naive', 'p4', 'mp4', 'p24', 'mp24')
+unlab_freq <- unlab_freq[ ,col_order]
+write.csv(unlab_freq, file = "unlab_freq_v2_tcells.csv", row.names = T)
 
 tcells$celltype <- Idents(tcells)
 tcells <- RenameIdents(tcells, 
-                       '7' = 'CD4 T',
-                       '10' = 'NK',
-                       '14' = 'CD4 T',
-                       '17' = 'CD8 T',
-                       '29' = 'Nuocyte',
-                       '31' = 'CD4 NKT',
+                       '5' = 'CD4 T', # Ccr7+
+                       '8' = 'NK',
+                       '15' = 'CD8 T', # Not Ccr7
+                       '17' = 'CD4 T', # Ccr7+
+                       '24' = 'DOUBLET',
+                       '26' = 'Nuocyte',
+                       '30' = 'CD4 T',
                        '37' = 'Treg',
-                       '38' = 'CD8 NKT',
-                       '39' = 'CD4 T',
-                       '50' = 'NK',
-                       '52' = 'gd T',
-                       '55' = 'CD4 T') # proliferating cells, are CD4 and not CD8 and not NK/NKT
-DimPlot(tcells, reduction = 'wnn.umap', label = T) + NoLegend()
-ggsave('tcells_wnnUMAP_labeled.png', width = 5, height = 5)
+                       '39' = 'CD8 T', # Not Ccr7
+                       '48' = 'NK',
+                       '50' = 'gd T',
+                       '54' = 'Prolif T') # proliferating T cells
+plot <- DimPlot(tcells, reduction = 'wnn.umap', label = T) + NoLegend()
+ggsave('tcells_wnnUMAP_labeled_v2.png', plot = plot, width = 5, height = 5)
 
-saveRDS(tcells, 'tcells_sub.rds')
-rm(tcells)
-
-# Determine identity of cluster 31 ----
-# Enriched for many TFs: Let's see how it maps onto adt umap alone
-# Some doublets present: Will remove with CellSelector
-plot <- DimPlot(subset(combined, ident = '31'), reduction = 'adt.umap', label = T) + NoLegend()
+# Select obvious doublets:
 select.cells <- CellSelector(plot = plot)
-DimPlot(subset(combined, ident = '31'), reduction = 'wnn.umap', label = T) + NoLegend()
-DimPlot(subset(combined, cells = select.cells), reduction = 'wnn.umap', label = T) + NoLegend()
+# [1] "p24_GATTCTTGTTGTGGCC-1" "mp4_AAAGTCCGTGCACAAG-1" "mp4_AAGTTCGGTCGCAGTC-1" "mp4_CTTGATTTCTAGTTCT-1"
+# [5] "mp4_GAGTGTTTCGAGATAA-1" "mp4_GCATGATCACATTCTT-1"
 
-plot <- DimPlot(subset(combined, ident = '31'), reduction = 'wnn.umap', label = T) + NoLegend()
-select.cells.2 <- CellSelector(plot = plot)
-
-# Subset out Macrophage/Monocyte/DC Cluster
-mamodc <- subset(combined, idents = c(10,18,23,24,31))
-DimPlot(mamodc, reduction = 'wnn.umap', label = T) + NoLegend()
-
-Idents(mamodc) <- "wsnn_res.3"
-DimPlot(mamodc, reduction = 'wnn.umap', label = T) + NoLegend()
-ggsave('mamodc_res3_wnnUMAP.png', width = 5, height = 5)
-
-DefaultAssay(mamodc) <- 'SCT'
-FeaturePlot(mamodc, features = c('Ms4a6d', 'Cybb'), reduction = 'wnn.umap')
-
-DefaultAssay(mamodc) <- 'ADT'
-FeaturePlot(subset(mamodc, cells = c(select.cells, select.cells.2), invert = T), features = c("CD19-TotalA", "CD2-TotalA", "Ly6g.Ly6c-TotalA"), reduction = 'wnn.umap')
-plot <- FeaturePlot(mamodc, features = "Ly-6G-TotalA", reduction = 'wnn.umap')
-select.cells.3 <- CellSelector(plot = plot)
-select.cells.4 <- CellSelector(plot = plot)
-DefaultAssay(mamodc) <- 'integratedSCT_'
-
-# Remove more doublets:
-dim(combined) # [1]   120 26795
-combined <- subset(combined, cells = c(select.cells, 
-                                       select.cells.2,
-                                       select.cells.3, 
-                                       select.cells.4), invert = T)
-dim(combined) # [1]   120 26752
-DimPlot(combined, reduction = 'wnn.umap', label = T) + NoLegend()
-
-# Compute marker genes without doublets now:
-## Exporting top 10 marker genes:
-DefaultAssay(combined) <- "SCT"
-combined.markers <- FindAllMarkers(combined, only.pos = TRUE, 
-                                 min.pct = 0.25, logfc.threshold = 0.6, 
-                                 max.cells.per.ident = Inf)
-write.csv(combined.markers, file = "combined_gene_biomarkers_no_dub.csv", row.names = FALSE)
-
-# Remove droplet clusters with migh mt% ---------------------------
-# Remove clusters with very high mt gene markers, sometimes these have very high 
-# transcription factor expression as well. 
-FeaturePlot(combined, features = 'percent.mt', reduction = 'wnn.umap')
-ggsave('percent.mt_wnn.png', width = 5, height = 5)
-
-# Overcluster to isolate might mt% regions:
-Idents(combined) <- 'wsnn_res.3'
-VlnPlot(combined, features = 'percent.mt', group.by = 'orig.ident')
-VlnPlot(combined, features = 'percent.mt') + NoLegend()
-
-DefaultAssay(combined) <- "SCT"
-combined.markers <- FindAllMarkers(combined, only.pos = TRUE, 
-                                   min.pct = 0.25, logfc.threshold = 0.6, 
-                                   max.cells.per.ident = Inf)
-write.csv(combined.markers, file = "gene_biomarkers_unlab_res3.csv", row.names = FALSE)
-
-dim(combined) # [1] 18037 26752
-combined <- subset(combined, idents = c(13, 39, 41), invert = TRUE)
-# combined <- subset(combined, idents = 41, invert = TRUE)
-dim(combined) # [1] 18037 25746
-
+# Return tcells idents to parents and remove several doublets found:
 Idents(combined) <- 'wsnn_res.1.5'
-DimPlot(combined, reduction = 'wnn.umap', label = T) + NoLegend()
-ggsave('high_mt_removed_res1.5.png', width = 5, height = 5)
+combined <- SetIdent(combined, cells = Cells(tcells), Idents(tcells))
+combined <- subset(combined, cells = select.cells, invert = TRUE)
 
-saveRDS(combined, 'combined_qc.rds')
+DimPlot(combined, reduction = 'wnn.umap', label = TRUE) + NoLegend()
+# No doublets in file. Will remove ident. 
+combined <- subset(combined, idents = 'DOUBLET', invert = TRUE)
+DimPlot(combined, reduction = 'wnn.umap', label = TRUE) + NoLegend() # Gone :)
+
+FeaturePlot(combined, features = 'Cd209a', reduction = 'wnn.umap')
 
 # Rename Idents ---------------------------
 # Saving old labels:
-combined[["old.ident"]] <- Idents(object = combined)
+combined[["old.ident"]] <- Idents(combined)
 
 # N = Neutrophil, T = T cell, B = B cell, gCap = gCap Endothelial, 
 # AM = Alveolar Macrophage, IM = Intersitial Macro, Vein = Vein Endo,
 
 # Renaming:
 combined <- RenameIdents(object = combined, 
-                         '0' = "N 1", 
-                         '1' = "N 2", 
-                         '2' = "gCap 1",
-                         '3' = "gCap 2",
-                         '4' = "B 1",
-                         '5' = "AM 1",
-                         '6' = "AT2 1",
-                         '7' = "gCap 3",
-                         '8' = "CD4 T 1",
-                         '9' = "NK",
-                         '10' = "N 3",
-                         '11' = "AM 2",
-                         '12' = "C Mono",
-                         '13' = "CD4 T 2",
-                         '14' = "CD8 T",
-                         '15' = "Myofib",
-                         '16' = "NC Mono ",
-                         '17' = "Lipofib 1",
-                         '18' = "AT1",
-                         '19' = "N 4",
-                         '20' = "N 5",
-                         '21' = "IM",
-                         '22' = "CD4 T 3",
-                         '23' = "aCap",
-                         '24' = "cDC 1",
-                         '25' = "Nuocyte",
-                         '26' = "B 2",
-                         '27' = "Efb1 Fib",
-                         '28' = "Treg",
-                         '29' = "CD4 T 4",
-                         '30' = "AM 3",
-                         '31' = "Vein",
+                         '0' = "N", 
+                         '1' = "gCap", 
+                         '2' = "N",
+                         '3' = "AM",
+                         '4' = "gCap",
+                         '5' = "Immature B",
+                         
+                         '7' = "AT 2",
+                         
+                         '9' = "C Mono",
+                         '10' = "N",
+                         '11' = "N",
+                         '12' = "AM",
+                         '15' = "AT 1",
+                         '16' = "NC Mono",
+                         '17' = "N",
+                         '18' = "aCap",
+                         '19' = "Myofib",
+                         '20' = "IM",
+                         '21' = "CD209 DC",
+                         '22' = "Ebf1 Fib",
+
+                         '24' = "Lipofib",
+                         '25' = "Mature B",
+
+                         
+                         '28' = "Vein",
+                         '29' = "Lipofib",
+                         '30' = "AM",
+                         '31' = "N",
                          '32' = "Baso",
-                         '33' = "Macro",
-                         '34' = "pDC",
-                         '35' = "AM 4",
-                         '36' = "Lipofib 2",
-                         '37' = "N 6",
-                         '38' = "AT2 2",
-                         '39' = "Lymph Fib",
-                         '40' = "B 3",
-                         '41' = "AM 5",
-                         '42' = "cDC 2",
-                         '43' = "Clara",
-                         '44' = "Mtx Fib")
+                         '33' = "pDC",
+                         '34' = "AM",
+                         '35' = "N",
+                         '36' = "Adv Fib",
+                         '37' = "Immature B",
+
+
+                         '40' = "N",
+                         '41' = "AT 2",
+                         '42' = "Lymph",
+                         '43' = "Cilliated")
 combined[["celltype"]] <- Idents(combined)
 # p4 <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 5) + NoLegend()
 # p4
 
-p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
-ggsave("umap_res1.5_lab6.png", height = 6, width = 6)
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, 
+             label.size = 4) + NoLegend()
+ggsave("umap_res1.5_lab.png", height = 6, width = 6)
 p <- p + theme(legend.position = "none",
                panel.grid = element_blank(),
                axis.title = element_blank(),
                axis.text = element_blank(),
                axis.ticks = element_blank())
-ggsave("umap_res1.5_lab_clean.png", height = 5, width = 5)
+ggsave("umap_res1.5_lab_clean_v2.png", height = 5, width = 5)
 
 # define a function that gets the colors of the clean UMAP
 get_colors <- function(p, obj){
@@ -486,34 +431,29 @@ p <- dittoSeq::dittoBarPlot(object = combined, var = combined@active.ident, grou
                   x.labels.rotate = F, ylab = 'Fraction of Cells')
 p$data$grouping <- factor(x = p$data$grouping, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 p + theme(axis.title.x=element_blank())
-ggsave("celltype_distribution_by_trt_leg.png", width = 6, height = 4.2)
+ggsave("celltype_distribution_by_trt_leg_v2.png", width = 6, height = 4.2)
 p + NoLegend()
-ggsave("celltype_distribution_by_trt_noLeg.png", width = 4.2, height = 4.2)
+ggsave("celltype_distribution_by_trt_noLeg_v2.png", width = 4.2, height = 4.2)
 
 # Clusters with Legend
 p <- DimPlot(combined, reduction = 'wnn.umap', label = FALSE, repel = TRUE, pt.size = 0.1)+ 
   theme(text = element_text(size=8, family = "sans"),  
         axis.title=element_text(size=8,family = "sans", face="bold"))
-ggsave("rawClusters.png", plot = p, width = 5, height = 4)
+ggsave("rawClusters_v2.png", plot = p, width = 5, height = 4)
 
 # Dimplot Split by Treatment
 p <- DimPlot(combined, reduction = 'wnn.umap', split.by = "orig.ident") + NoLegend()
 # change order in plot: 
 p$data$orig.ident <- factor(x = p$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 p
-ggsave("dimplot_splitby_trt.png", plot = p, width = 15, height = 5)
+ggsave("dimplot_splitby_trt_v2.png", plot = p, width = 15, height = 5)
 
 # Cluster by Group
 p5 <- DimPlot(combined, reduction = 'wnn.umap', group.by = "orig.ident") + 
   ggtitle(NULL) + NoLegend() + 
   theme(text = element_text(size=8, family = "sans"),  
         axis.title=element_text(size=8,family = "sans", face="bold"))
-ggsave("clusterByGroup.png", plot = p5, width = 5, height = 5)
-
-# rearrange orig.ident
-combined$orig.ident <- factor(combined$orig.ident, 
-                              levels = c('naive', 'p4', 'mp4', 'p24', 'mp24'))
-DimPlot(combined, split.by = "orig.ident") + NoLegend() # works
+ggsave("clusterByGroup_v2.png", plot = p5, width = 5, height = 5)
 
 # Tables:
 # number of cells per treatment
@@ -529,69 +469,18 @@ write.csv(t1, file = "t1.csv", row.names = F)
 write.csv(t2, file = "t2.csv", row.names = T)
 write.csv(t3, file = "t3.csv", row.names = F)
 
-rm(p, p4, p5, p6)
+saveRDS(combined, 'combined_07072021.rds')
+# combined <- readRDS('combined_07072021.rds')
 
-saveRDS(combined, 'combined_04192021.rds')
-# combined <- readRDS('combined_04192021.rds')
+# Bring back in RNA for needs:
 
-# Condensed Renaming  ---------------------------
-Idents(combined) <- 'old.ident'
-combined <- RenameIdents(object = combined, 
-                         '0' = "N B", 
-                         '1' = "N A", 
-                         '2' = "gCap 1",
-                         '3' = "gCap 2",
-                         '4' = "B 1",
-                         '5' = "AM 1",
-                         '6' = "AT2 1",
-                         '7' = "gCap 3",
-                         '8' = "CD4 T 1",
-                         '9' = "NK",
-                         '10' = "N C",
-                         '11' = "AM 2",
-                         '12' = "C Mono",
-                         '13' = "CD4 T 2",
-                         '14' = "CD8 T",
-                         '15' = "Myofib",
-                         '16' = "NC Mono ",
-                         '17' = "Lipofib 1",
-                         '18' = "AT1",
-                         '19' = "N C",
-                         '20' = "N A",
-                         '21' = "IM",
-                         '22' = "CD4 T 3",
-                         '23' = "aCap",
-                         '24' = "cDC 1",
-                         '25' = "Nuocyte",
-                         '26' = "B 2",
-                         '27' = "Efb1 Fib",
-                         '28' = "Treg",
-                         '29' = "CD4 T 4",
-                         '30' = "AM 3",
-                         '31' = "Vein",
-                         '32' = "Baso",
-                         '33' = "Macro",
-                         '34' = "pDC",
-                         '35' = "AM 4",
-                         '36' = "Lipofib 2",
-                         '37' = "N B",
-                         '38' = "AT2 2",
-                         '39' = "Lymph Fib",
-                         '40' = "B 3",
-                         '41' = "AM 5",
-                         '42' = "cDC 2",
-                         '43' = "Clara",
-                         '44' = "Mtx Fib")
-combined[["condensed"]] <- Idents(combined)
+rna <- readRDS('seuratObj_rna.rds')
+rna <- subset(rna, cells = Cells(combined))
 
-p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 3.5) + NoLegend()
-ggsave("umap_condensed.png", height = 6, width = 6)
-p <- p + theme(legend.position = "none",
-               panel.grid = element_blank(),
-               axis.title = element_blank(),
-               axis.text = element_blank(),
-               axis.ticks = element_blank())
-ggsave("umap_condensed_clean.png", height = 5, width = 5)
+combined[['RNA']] <- rna@assays[["RNA"]]; rm(rna)
+
+saveRDS(combined, 'combined_07072021_rna.rds')
+# combined <- readRDS('combined_07072021_rna.rds') #7/7/2021
 
 # Neutrophil (N) Subclustering  ---------------------------
 Idents(combined) <- 'celltype'

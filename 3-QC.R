@@ -274,13 +274,11 @@ combined <- FindClusters(combined, graph.name = "wsnn", algorithm = 3, resolutio
 DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, label.size = 4) + NoLegend()
 ggsave(paste("dimplot_", "res_", res, "_used.png", sep = ""), width = 5, height = 5)
 
-### ADD 0 CUTOFF TO ALL ADT VISUALIZATIONS ON FEATURE PLOT
-
 FeaturePlot(combined, features = c('S.Score', 'G2M.Score'), reduction = 'wnn.umap', 
             min.cutoff = 0)
 ggsave('cell_cycle_scores.wnn.png', width = 10, height = 5)
 
-# Run: 3.1-cell_markers.R
+# Run: 4.1-cell_markers.R
 
 # Marker Genes for Unlabeled Clsuters ---------------------------
 ## Exporting top 10 marker genes:

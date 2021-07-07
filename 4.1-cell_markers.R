@@ -151,7 +151,6 @@ markers.to.plot <- c('C1qc',
                      'Cd74')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot)+ format
 ggsave("MCA_Interstitial_Macro.png", width = 8.5, height = 7) 
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # DC-Naaa high - 15 (except not Naaa high really)
 markers.to.plot <- c('Cst3',
@@ -166,7 +165,6 @@ markers.to.plot <- c('Cst3',
                      'H2-Ab1')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_DC_Naaa_High.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Stromal cell Dcn high - 14
 markers.to.plot <- c('Dcn',
@@ -209,7 +207,6 @@ markers.to.plot <- c('Scgb1a1',
                      'Cbr2')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Clara_Cell.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # cDC Gngt2 high - 6 maybe
 markers.to.plot <- c('Gngt2',
@@ -238,7 +235,6 @@ markers.to.plot <- c('Ager',
                      'Aqp5')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_AT1.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # cDC Mgl2 high - 15 (I would call this CD209+ DC)
 markers.to.plot <- c('Ccl17',
@@ -268,7 +264,7 @@ markers.to.plot <- c('Cxcr6',
                      'Crem')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Nuocyte.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
+
 
 # Endothelial cell Tmem100 high - 2 (similar to 13ish, no Plvap in 13)
 markers.to.plot <- c('Plvap',
@@ -297,7 +293,7 @@ markers.to.plot <- c('Ccdc153',
                      'Scgb1a1')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Cilliated_Cell.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
+
 
 # Endothelial cell Kdr high - 13
 markers.to.plot <- c('Cldn5',
@@ -312,7 +308,6 @@ markers.to.plot <- c('Cldn5',
                      'Ly6a')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Endothelial_Cell_Kdr_High.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Endothelial cells Vwf high - 2, 8-ish
 markers.to.plot <- c('Vwf',
@@ -327,7 +322,6 @@ markers.to.plot <- c('Vwf',
                      'Cav1')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Endothelial_Cell_Vwf_High.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Neutrophil - 10 probably, competing with eosinophil
 markers.to.plot <- c('Ngp',
@@ -342,7 +336,6 @@ markers.to.plot <- c('Ngp',
                      'G0s2')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Neutrophil.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Dividing DC - N/A
 markers.to.plot <- c('Cst3',
@@ -385,7 +378,6 @@ markers.to.plot <- c('Hmgb2',
                      'Nusap1')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Dividing_T_Cells.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Dividing cells - N/A (some similar to 12)
 markers.to.plot <- c('Cdc20',
@@ -400,7 +392,6 @@ markers.to.plot <- c('Cdc20',
                      'Spc24')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Dividing_Cells.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Alveolar macrophage  Pclaf high - N/A (some similar to 3)
 markers.to.plot <- c('Pclaf',
@@ -415,7 +406,6 @@ markers.to.plot <- c('Pclaf',
                      'Tlr2')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Alveolar_Macrophage_Pclaf_High.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Alveolar bipotent progenitor - 16 maybe
 markers.to.plot <- c('Clu',
@@ -430,7 +420,6 @@ markers.to.plot <- c('Clu',
                      'Ndnf')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot)  + format
 ggsave("MCA_Alveolar_Bipotent_Progenitor.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Ig producing B cell - No J chain but otherwise 5
 markers.to.plot <- c('Jchain',
@@ -445,7 +434,6 @@ markers.to.plot <- c('Jchain',
                      'Txndc5')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Ig_Producing_B_Cell.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # cDC H2-M2 high - N/A (15 some similar)
 markers.to.plot <- c('Fscn1',
@@ -460,7 +448,6 @@ markers.to.plot <- c('Fscn1',
                      'Ccl17')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_cDC_H2-M2_High.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Basophill - 17
 markers.to.plot <- c('Ccl4',
@@ -475,7 +462,6 @@ markers.to.plot <- c('Ccl4',
                      'Nfkbia')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Basophil.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # Monocyte progenitor - N/A
 markers.to.plot <- c('Elane',
@@ -490,7 +476,6 @@ markers.to.plot <- c('Elane',
                      'I830127L07Rik')
 DotPlot(combined, assay = "integratedSCT_", features = markers.to.plot) + format
 ggsave("MCA_Monocyte_Progenitor.png", width = 8.5, height = 7)
-DotPlot(combined, assay = "RNA", features = markers.to.plot)
 
 # cDC Tubb5 high - N/A (some shared with 15)
 markers.to.plot <- c('Ccl17',
@@ -631,7 +616,7 @@ ggsave('paramita_lymphatic_fibro.png', width = 8.5, height = 7)
 
 # Megakaryocytes - N/A
 markers.to.plot <- c("Ppbp", "Nrgn", "Clec1b", "Alox12", "Gp9", "Itga2b", "Tmem40", "Tubb1", "Treml1", "Gp1ba", "Gp5")
-DotPlot(combined, assay = "RNA", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + 
+DotPlot(combined, assay = "SCT", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + 
   RotatedAxis()
 ggsave('paramita_megakarocyte.png', width = 8.5, height = 7)
 
@@ -734,7 +719,7 @@ ggsave('liu_Ebf14+_fibro.png', width = 8.5, height = 7)
 
 # Intermediate fibroblasts - N/A
 markers.to.plot <- c("Agtr2", "Prss35", "Igfbp7", "Fbln5", "Ptn", "Heyl", "Fstl1", "Tm4sf1")
-DotPlot(combined, assay = "RNA", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + RotatedAxis()
+DotPlot(combined, assay = "SCT", features = markers.to.plot, cols = c("blue", "red"), dot.scale = 8) + RotatedAxis()
 ggsave('liu_intermediate_fibro.png', width = 8.5, height = 7)
 
 # Mesothelial cells - N/A
