@@ -1020,12 +1020,8 @@ FeaturePlot(mono, features = c('CD170-TotalA'))
 FeaturePlot(mono, features = c('CD103-TotalA', 'CD11c-TotalA', 
                                'CD11b-TotalA', 'CD24-TotalA'))
 
-
 # remove doublets: idents
-
-
-
-
+# none
 
 saveRDS(mono, 'mono_int_07212022.rds')
 rm(mono, all.markers, anchors, seurat_list, mono.markers, all.genes, features)
@@ -1043,7 +1039,6 @@ FeaturePlot(combined, features = 'CD103-TotalA', reduction = 'wnn.umap')
 ggsave('mono_sub_CD103.png', width = 5, height = 5)
 FeaturePlot(combined, features = 'CD11b-TotalA', reduction = 'wnn.umap')
 
-
 DefaultAssay(combined) <- "SCT"
 combined.markers <- FindAllMarkers(combined, only.pos = FALSE, 
                                min.pct = 0.1, logfc.threshold = 0.6, 
@@ -1051,6 +1046,65 @@ combined.markers <- FindAllMarkers(combined, only.pos = FALSE,
 all.markers <- combined.markers %>% group_by(cluster)
 write.csv(all.markers, file = "combined_sub_mono_cluster_biomarkers_wnn.csv", row.names = FALSE)
 
+dim(combined) # [1] 18010  2255
+saveRDS(combined, 'mono_clust_by_resolution_07282021.rds')
+
+# Apply all subclustering to parent: ---------------
+combined <- readRDS('combined_07122021.rds') # main
+
+# Generate a new column called sub_cluster in the metadata
+combined$sub_cluster <- Idents(combined)
+Idents(combined) <- 'sub_cluster'
+
+# Neutro:
+neutro <- readRDS('neutro_integrated_07212021.rds') # subs w/o doublets
+orig <- colnames( subset(combined, idents = 'N') )
+length(orig) # [1] 6533
+dim(neutro) # [1] 11286  6490
+dub <- setdiff(orig, colnames(neutro)) # doublets
+length(dub) # [1] 43
+
+dim(combined)
+combined <- subset(combined, cells = dub, invert = TRUE)
+dim(combined)
+
+
+
+
+###
+### DO TO ALL SUBCLUSTERS SIMILARLY ###
+###
+
+struct <- readRDS('struct_integrated_07212021.rds')
+am <- readRDS('am_int_07212021.rds')
+lympho <- readRDS('lymphocytes_int_07212021.rds')
+mono <- readRDS('mono_clust_by_resolution_07282021.rds')
+
+
+
+
+
+
+
+
+combined <- SetIdent(combined, cells = Cells(struct), Idents(struct))
+combined$sub_cluster <- Idents(combined)
+
+DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
+        cells = Cells(struct), reduction = 'wnn.umap') + NoLegend()
+ggsave('struct_subcluster_onUMAP.png', height = 5, width = 5)
+
+DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
+        cells = Cells(struct), reduction = 'sct.umap') + NoLegend()
+ggsave('struct_subcluster_onUMAP_SCT_sketchy.png', height = 5, width = 5)
+
+combined$celltype <- combined$sub_cluster
+Idents(combined) <- 'celltype'
+
+saveRDS(combined, 'combined_04_22_2021.rds')
+saveRDS(struct, 'struct_04_23_2021.rds')
+
+rm(struct, p)
 
 # Figuring out Neutrophil / Eosinophils  ---------------------------
 combined  <- readRDS('combined_04_25_2021c.rds')
@@ -1529,29 +1583,7 @@ ggsave('N_AM_GSEA_dot_plot.png', width = 12.5, height = 5)
 # Struct apply to parent (old) --------------------------- 
 
 # struct <- readRDS('struct_04_23_2021.rds')
-combined <- readRDS('combined_04192021.rds')
 
-# Generate a new column called sub_cluster in the metadata
-combined$sub_cluster <- Idents(combined)
-Idents(combined) <- 'sub_cluster'
-combined <- SetIdent(combined, cells = Cells(struct), Idents(struct))
-combined$sub_cluster <- Idents(combined)
-
-DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
-        cells = Cells(struct), reduction = 'wnn.umap') + NoLegend()
-ggsave('struct_subcluster_onUMAP.png', height = 5, width = 5)
-
-DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
-        cells = Cells(struct), reduction = 'sct.umap') + NoLegend()
-ggsave('struct_subcluster_onUMAP_SCT_sketchy.png', height = 5, width = 5)
-
-combined$celltype <- combined$sub_cluster
-Idents(combined) <- 'celltype'
-
-saveRDS(combined, 'combined_04_22_2021.rds')
-saveRDS(struct, 'struct_04_23_2021.rds')
-
-rm(struct, p)
 
 # Important Violin and Feature Plots ----
 # combined <- readRDS('combined_04_25_2021c.rds')
