@@ -1056,59 +1056,67 @@ combined <- readRDS('combined_07122021.rds') # main
 combined$sub_cluster <- Idents(combined)
 Idents(combined) <- 'sub_cluster'
 
+# Define function to apply removed doublets to combined seurat
+remove_dub <- function(obj, sub_obj, ident_list){
+  orig <- colnames( subset(obj, idents = ident_list) )
+  print(length(orig))
+  print(dim(sub_obj))
+  dub <- setdiff(orig, colnames(sub_obj)) 
+  print(length(dub))
+  
+  print(dim(obj))
+  obj <- subset(obj, cells = dub, invert = TRUE)
+  print(dim(obj))
+  return(obj)
+}
+
 # Neutro:
 neutro <- readRDS('neutro_integrated_07212021.rds') # subs w/o doublets
-orig <- colnames( subset(combined, idents = 'N') )
-length(orig) # [1] 6533
-dim(neutro) # [1] 11286  6490
-dub <- setdiff(orig, colnames(neutro)) # doublets
-length(dub) # [1] 43
+ident_list <- c('N')
+combined <- remove_dub(obj = combined, sub_obj = neutro, ident_list = ident_list)
+rm(neutro)
 
-dim(combined)
-combined <- subset(combined, cells = dub, invert = TRUE)
-dim(combined)
-
-
-
-
-###
-### DO TO ALL SUBCLUSTERS SIMILARLY ###
-###
-
+# Struct
 struct <- readRDS('struct_integrated_07212021.rds')
+ident_list <- c('AT 2', 'AT 1', 'Lipofib', 'aCap', 'Ebf1 Fib', 'gCap', 'Vein', 
+                'Lymph', 'Adv Fib', 'Myofib')
+combined <- remove_dub(combined, struct, ident_list)
+rm(struct)
+
+# Alveolar Macro
 am <- readRDS('am_int_07212021.rds')
+ident_list <- c('AM')
+combined <- remove_dub(obj = combined, sub_obj = am, ident_list = ident_list)
+rm(am)
+
+# Lymphocytes
 lympho <- readRDS('lymphocytes_int_07212021.rds')
+ident_list <- c('Immature B', 'Mature B', 'CD4 T', 'CD8 T', 'NK', 'Nuocyte', 'Treg', 'gd T', 'Prolif T')
+combined <- remove_dub(obj = combined, sub_obj = lympho, ident_list = ident_list)
+rm(lympho)
+
+# Macro / Mono / DC
 mono <- readRDS('mono_clust_by_resolution_07282021.rds')
+ident_list <- c('C Mono', 'NC Mono', 'IM', 'CD209 DC', 'pDC')
+combined <- remove_dub(obj = combined, sub_obj = mono, ident_list = ident_list)
+# Apply Macro / Mono / DC Subcluster Identities
+Idents(mono) <- 'wsnn_res.4'
+DimPlot(mono, reduction = 'wnn.umap')
+mono <- RenameIdents(mono, '12' = 'C Mono', '41' = 'C Mono', '16' = 'NC Mono', 
+                     '20' = 'IM', '33' = 'H2 Hi DC', '46' = 'CD103 DC', '47' = 'pDC')
+p <- DimPlot(mono, reduction = 'wnn.umap'); p
+dub <- CellSelector(p)
+dub # [1] "p4_CAGCAGCGTGTGTGGA-1"  "p24_GGTAACTGTAGTACGG-1" "p24_TGAGTCATCGGCATAT-1"
 
+rm(mono)
 
-
-
-
-
-
-
-combined <- SetIdent(combined, cells = Cells(struct), Idents(struct))
-combined$sub_cluster <- Idents(combined)
-
-DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
-        cells = Cells(struct), reduction = 'wnn.umap') + NoLegend()
-ggsave('struct_subcluster_onUMAP.png', height = 5, width = 5)
-
-DimPlot(combined, label = TRUE, repel = TRUE, label.size = 4,
-        cells = Cells(struct), reduction = 'sct.umap') + NoLegend()
-ggsave('struct_subcluster_onUMAP_SCT_sketchy.png', height = 5, width = 5)
-
-combined$celltype <- combined$sub_cluster
-Idents(combined) <- 'celltype'
-
-saveRDS(combined, 'combined_04_22_2021.rds')
-saveRDS(struct, 'struct_04_23_2021.rds')
-
-rm(struct, p)
+# Return ident to parent and remove these three doublets
+combined <- SetIdent(combined, cells = Cells(mono), Idents(mono))
+dim(combined) # [1]   120 25442
+combined <- subset(combined, cells = dub, invert = TRUE)
+dim(combined) # [1]   120 25439
 
 # Figuring out Neutrophil / Eosinophils  ---------------------------
-combined  <- readRDS('combined_04_25_2021c.rds')
-
 DefaultAssay(combined) <- 'SCT'
 FeaturePlot(combined, features = c('Ptprc', 'Itgax', 'Ly6g',    
                                    'Siglecf', 'Ccr3', 'Prg2',
@@ -1138,13 +1146,12 @@ write.csv(t1, file = "t1_condensed.csv", row.names = F)
 write.csv(t2, file = "t2_condensed.csv", row.names = T)
 write.csv(t3, file = "t3_condensed.csv", row.names = F)
 
+saveRDS(combined, 'combined_subclustered_07292021.rds')
+
 # DEGs by Treatment vs. Naive  ---------------------------
-combined  <- readRDS('combined_04_25_2021c.rds')
+# combined <- readRDS('combined_subclustered_07292021.rds')
 unique(Idents(combined))
 unique(combined$celltype) 
-# wierd stuff here... like cDC 2 which was condensed, will rename celltype
-combined$celltype <- Idents(combined)
-
 freq_table <- read.csv('t2_condensed.csv', row.names = 'X')
 
 # Create metadata colum for celltype + treatment condition
@@ -1152,7 +1159,7 @@ combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
 Idents(combined) <- "celltype.trt"
 
 # DEGs will be calculated relative to naive
-DefaultAssay(combined) <- "SCT" # you definitely dont want to do this on integratedSCT_
+DefaultAssay(combined) <- "SCT" 
 cellList <- unique(combined$celltype)
 cellList <- levels(cellList)
 
@@ -1211,13 +1218,13 @@ for (i in 1:length(x = cellList)){
   }
 }
 
-saveRDS(degList, file = "04292021.degList.vs.naive.rds")
-saveRDS(graphList, file = "04292021.degList.vs.naive.rds")
+saveRDS(degList, file = "degList.vs.naive.07292021.rds")
+saveRDS(graphList, file = "degList.vs.naive.07292021.rds")
 
 # Saving plots as png:
 for (i in 1:length(x = graphList)){
   celltype <- degList[[i]]$cellType[1]
-  filename = paste(celltype, "_v naive", ".png", sep = "")
+  filename = paste(celltype, "_v naive_v2", ".png", sep = "")
   filename <- chartr("/", " ", filename)
   
   ggsave(filename = filename, plot = graphList[[i]],
@@ -1225,9 +1232,10 @@ for (i in 1:length(x = graphList)){
 }
 
 degList <- do.call(rbind, degList)
-write.csv(degList, file = "2021-04-29 DEGs.csv")
+write.csv(degList, file = "2021-07-29 DEGs.csv")
+saveRDS(combined, 'combined_07292021_v2.rds')
 
-# GSEA  ---------------------------
+# GSEA (stop,7/29/21)  ---------------------------
 library(fgsea)
 library(msigdbr)
 # Edited by MCK based on analysis of Hurskainen et all. 2021 Nat. Comm.
