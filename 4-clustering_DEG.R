@@ -1614,9 +1614,9 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('epithelial_GSEA_08072021.png', width = 8.75, height = 5)
+ggsave('myeloid_GSEA_08072021.png', width = 10.5, height = 5)
 
-
+# Done 08072021
 
 
 
