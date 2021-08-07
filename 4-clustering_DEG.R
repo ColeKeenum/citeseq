@@ -21,9 +21,11 @@ library(future)
 # BiocManager::install("glmGamPoi")
 
 plan()
+#plan("multiprocess", workers = 12)
 
 # Load Data  ---------------------------
-setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
+setwd('~/Documents/citeseq-code')
+# setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
 # setwd("C:/Users/UPDATE/Desktop/COVID Lung CITE-Seq")
 
 # Bring in QC-filtered cells, keep DSB-normalized data
@@ -1241,21 +1243,8 @@ library(msigdbr)
 # Edited by MCK based on analysis of Hurskainen et all. 2021 Nat. Comm.
 # Using version 7.4 from the MSigDB
 
-result_table <- read.csv('2021-04-29 DEGs.csv', row.names = 'X')
+result_table <- read.csv('2021-07-29 DEGs.csv', row.names = 'X')
 
-# test <- result_table$cellType
-# result_table$cellType <- gsub("(.*)_.*","\\1",test)
-
-# Collect the Hallmark, KEGG, GO, and Reactome datasets
-# THESE ARE FOR HUMAN
-# hallmarks <- fgsea::gmtPathways("./GeneLists/h.all.v7.4.symbols.gmt")
-# kegg <- fgsea::gmtPathways("./GeneLists/c2.cp.kegg.v7.4.symbols.gmt")
-# go <- fgsea::gmtPathways("./GeneLists/c5.go.bp.v7.4.symbols.gmt")
-# reactome <- fgsea::gmtPathways("./GeneLists/c2.cp.reactome.v7.4.symbols.gmt")
-
-# Define a function to run GSEA for a single cluster
-
-# Msigdbr usage TEST:
 msigdbr_collections()
 
 hallmarks <- msigdbr(species = "Mus musculus", category = "H")
@@ -1269,6 +1258,7 @@ reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
 
 gene_sets <- c(hallmarks, kegg, go, reactome)
 
+# Define a function to run GSEA for a single cluster
 runGSEA <- function(cluster){
   print(cluster)
   results <- filter(result_table, cellType == cluster)
@@ -1287,7 +1277,7 @@ runGSEA <- function(cluster){
                 stats = cluster_genes,
                 minSize=15,
                 maxSize=500,
-                nproc = 3,
+                nproc = 12,
                 eps = 0) # no eps cutoff so we have "true" P-val
   gsea$cluster <- cluster
   
@@ -1297,20 +1287,19 @@ runGSEA <- function(cluster){
 cluster_list <- unique(result_table$cellType)
 fgsea_results <- lapply(cluster_list, runGSEA)
 
-saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_EPS.rds')
-saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_EPS.rds')
+saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_EPS_08072021.rds')
+saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_EPS_08072021.rds')
 
 fgsea_results <- do.call("rbind", fgsea_results)
 fgsea_results <- as.data.frame(fgsea_results)
 fgsea_results$leadingEdge <- as.character(fgsea_results$leadingEdge)
-write.csv(fgsea_results, 'fgsea_results_05012021_PCT_EPS.csv')
+write.csv(fgsea_results, 'fgsea_results_08072021_PCT_EPS.csv')
 
 fgsea_results <- filter(fgsea_results, padj < 0.05)
-write.csv(fgsea_results, 'fgsea_results_05012021_PCT_EPS_FILT.csv')
+write.csv(fgsea_results, 'fgsea_results_08072021_PCT_EPS_FILT.csv')
 
 # DEG / GSEA Visualization ---------------------------
-
-result_table <- read.csv('2021-04-29 DEGs.csv', row.names = 'X')
+result_table <- read.csv('2021-07-29 DEGs.csv', row.names = 'X')
 
 # Make bar charts of overall number of DEGs: 
 # (colored regions on volcano plots)
@@ -1358,7 +1347,7 @@ for (i in 1:length(cellList)){
   ggsave(paste(cellList[i] , '_totalDEG.png', sep = ''), plot = p, width = 4, height = 4)
 }
 
-saveRDS(plot_list, 'GSEA_plot_list.rds')
+saveRDS(plot_list, 'GSEA_plot_list_08072021.rds')
 
 # Define function to write a frequency table with top 10 +/- GSEA categories
 top_GSEA <- function(df, n = 10){
@@ -1374,7 +1363,8 @@ top_GSEA <- function(df, n = 10){
                            'GO_NERVE_DEVELOPMENT',
                            'GO_NEGATIVE_REGULATION_OF_NERVOUS_SYSTEM_DEVELOPMENT',
                            'GO_NERVOUS_SYSTEM_PROCESS',
-                           'GO_POSITIVE_REGULATION_OF_NERVOUS_SYSTEM_DEVELOPMENT')
+                           'GO_POSITIVE_REGULATION_OF_NERVOUS_SYSTEM_DEVELOPMENT',
+                           'GOBP_RESPONSE_TO_ARSENIC_CONTAINING_SUBSTANCE')
   
   df <- filter(df, !(pathway %in% uninteresting_paths))
   
@@ -1401,192 +1391,237 @@ library(ggdendro)
 library(cowplot)
 library(ggtree)
 
-all_filt_res <- read_excel('fgsea_results_05012021_PCT_EPS_FILT.xlsx')
+all_filt_res <- read.csv('fgsea_results_08072021_PCT_EPS_FILT.csv')
 term_frequencies <- table(all_filt_res$pathway)
-write.csv(term_frequencies, 'fgsea_results_frequencies_all_numb.csv')
+write.csv(term_frequencies, 'fgsea_results_frequencies_all_numb_08072021.csv')
 
 df_total <- top_GSEA(all_filt_res, n = 30)
-write.csv(df_total, 'fgsea_results_30_top_pos_neg.csv')
+write.csv(df_total, 'fgsea_results_30_top_pos_neg_08072021.csv')
 
 all_filt_res$cellType <- gsub("(.*)_.*","\\1",all_filt_res$cluster)
 
-# > T / NK cell metacluster ---------------------------
-# T cell, Nuocyte, and NK / NKT cell metacluster overall DEG plot grid:
-cowplot::plot_grid(plotlist = plot_list[c(2,4,5,6,7,8)])
-ggsave('t_NK_metacluster_DEG.png', width = 9, height = 6)
-
-# GSEA Plot
-results <- filter(all_filt_res, cellType == 'NK' | cellType == 'gd T' | 
-                    cellType == 'Nuocyte' | cellType ==  'Treg' | 
-                    cellType == 'NKT' | cellType == 'CD4 T' |  
-                    cellType == 'CD8 T')
-t_nk_df <- top_GSEA(results, n = 10)
-write.csv(t_nk_df, 'fgsea_T_NK_frequencies_PCT.csv', row.names = F)
-
 format_GSEA <- function(df_results, top_df, n = 25){
   df_results <- filter(df_results, pathway %in% top_df$pos_category | 
-                      pathway %in% top_df$neg_category)
-  bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_')
+                         pathway %in% top_df$neg_category)
+  bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_', 'GOBP_')
   df_results$pathway <- str_remove(df_results$pathway, paste(bad_str, collapse = '|'))
   df_results$pathway <- str_trunc(df_results$pathway, n)
   return(df_results)
 }
 
-results <- format_GSEA(results, t_nk_df)
+# > T cell subsets ---------------------------
+vec <- c('CD4 T', 'CD8 T', 'gd T', 'Treg')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 3)
+}
+
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+
+results <- format_GSEA(results, df, n=30)
+
+# Adjust the orders of the x-axis in the plot
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('T_NK_GSEA_dot_plot.png', width = 13, height = 5)
+ggsave('T_GSEA_08072021.png', width = 7, height = 6)
 
-# > LESS CELLS FOR NIH ---------------------------
-results <- filter(all_filt_res, cellType == 'CD4 T' |  
-                    cellType == 'CD8 T' | cellType == 'B 1' | cellType == 'B 2')
-t_nk_df <- top_GSEA(results, n = 10)
-write.csv(t_nk_df, 'fgsea_T_NK_frequencies_PCT.csv', row.names = F)
+# > B cell subsets ---------------------------
+vec <- c('Mature B', 'Immature B')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 3)
+}
 
-results <- format_GSEA(results, t_nk_df)
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+
+results <- format_GSEA(results, df, n=30)
+
+# Adjust the orders of the x-axis in the plot
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('NIH_GSEA_dot_plot.png', width = 9.75, height = 4.2)
+ggsave('B_GSEA_08072021.png', width = 7, height = 6)
 
-
-# > B cell metacluster ---------------------------
-# Same for B cells
-cowplot::plot_grid(plotlist = plot_list[c(23, 27)])
-ggsave('B_metacluster_DEG.png', width = 6, height = 3)
-
-# GSEA Plot
-results <- filter(all_filt_res, cellType == 'B 1' | cellType == 'B 2')
-b_df <- top_GSEA(results, n = 10)
-write.csv(b_df, 'fgsea_B_frequencies_PCT.csv', row.names = F)
-
-results <- format_GSEA(results, b_df, n = 35)
-
+# > Lymphocyte cell subsets ---------------------------
+# I like this one!
+vec <- c('CD4 T', 'CD8 T', 'Mature B', 'Immature B', 'NK')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 3)
+}
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+results <- format_GSEA(results, df, n=30)
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('B_GSEA_dot_plot.png', width = 8, height = 5)
+ggsave('lympho_GSEA_08072021.png', width = 10.5, height = 6)
 
-# > Endothelial cell metacluster ---------------------------
-cellList
-
-cowplot::plot_grid(plotlist = plot_list[c(13,15,21)], ncol = 3)
-ggsave('endo_metacluster_DEG.png', width = 9, height = 3)
-
-# GSEA Plot
-results <- filter(all_filt_res, cellType == 'gCap' | cellType == 'aCap' |
-                    cellType == 'Vein')
-endo_df <- top_GSEA(results, n = 10)
-write.csv(endo_df, 'fgsea_endo_frequencies_PCT.csv', row.names = F)
-
-results <- format_GSEA(results, endo_df, n = 40)
-
+# > Endothelial cell subsets ---------------------------
+vec <- c('gCap', 'aCap', 'Vein')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 3)
+}
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+results <- format_GSEA(results, df, n=40)
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('Endo_GSEA_dot_plot.png', width = 10, height = 5)
+ggsave('endo_GSEA_08072021.png', width = 9.5, height = 5)
 
-# > Fibroblast cell metacluster ---------------------------
-cellList
-
-cowplot::plot_grid(plotlist = plot_list[c(16,17,18,19,22)], ncol = 5)
-ggsave('fibro_metacluster_DEG.png', width = 15, height = 3)
-
-# GSEA Plot
-fib <- c('Myofib', 'Lipofib', 'Ebf1+ Fib', 'Alv Fib', 'Adv Fib')
-results <- filter(all_filt_res, cellType %in% fib)
-fib_df <- top_GSEA(results, n = 10)
-write.csv(fib_df, 'fgsea_fib_frequencies_PCT.csv', row.names = F)
-
-results <- format_GSEA(results, fib_df, n = 40)
-
+# > Fibroblast subsets ---------------------------
+vec <- c('Lipofib', 'Myofib', 'Ebf1 Fib', 'Adv Fib')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 3)
+}
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+results <- format_GSEA(results, df, n=40)
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('Fib_GSEA_dot_plot.png', width = 12, height = 5)
+ggsave('fibro_GSEA_08072021.png', width = 10.75, height = 5)
 
-# > Epithelial cell metacluster ---------------------------
-cellList
-
-cowplot::plot_grid(plotlist = plot_list[c(14,20)], ncol = 2)
-ggsave('epithelial_metacluster_DEG.png', width = 6, height = 3)
-
-# GSEA Plot
-results <- filter(all_filt_res, cellType == 'AT 2' | cellType == 'AT 1')
-at_df <- top_GSEA(results, n = 10)
-write.csv(at_df, 'fgsea_AT_frequencies_PCT.csv', row.names = F)
-
-results <- format_GSEA(results, at_df, n = 40)
-
+# > Epithelial subsets ---------------------------
+vec <- c('AT 1', 'AT 2')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 4)
+}
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+results <- format_GSEA(results, df, n=40)
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('Epithelial_GSEA_dot_plot.png', width = 9.5, height = 5)
+ggsave('epithelial_GSEA_08072021.png', width = 8.75, height = 5)
 
-# > Monocyte cell metacluster ---------------------------
-cellList
-
-cowplot::plot_grid(plotlist = plot_list[c(1,24,25,26,29,30)], ncol = 6)
-ggsave('Monocyte_metacluster_DEG.png', width = 6*3, height = 3)
-
-# GSEA Plot
-mono <- c('NC Mono', 'C Mono', 'IM', 'cDC 1', 'pDC')
-results <- filter(all_filt_res, cellType %in% mono)
-mono_df <- top_GSEA(results, n = 10)
-write.csv(mono_df, 'fgsea_mono_frequencies_PCT.csv', row.names = F)
-
-results <- format_GSEA(results, mono_df, n = 40)
-
+# > MaMoDC + AM + Baso (Myeloid) cell metacluster ---------------------------
+vec <- c('C Mono', 'NC Mono', 'AM', 'Baso')
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(all_filt_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 4)
+}
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+results <- format_GSEA(results, df, n=40)
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4", "p24", "mp24")
+for (i in 1:length(vec)-1){
+  for (j in 1:length(trtList)){
+    orders[i*4+j] <- paste(vec[i+1], trtList[j], sep = '_')
+  }
+}
 ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
   theme(axis.title.y = element_blank(), 
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('Mono_GSEA_dot_plot.png', width = 12.5, height = 5)
+ggsave('epithelial_GSEA_08072021.png', width = 8.75, height = 5)
 
-# > Neutro / Alv. Macro metacluster ---------------------------
-cellList
 
-cowplot::plot_grid(plotlist = plot_list[c(9,10,11,12,28)], ncol = 5)
-ggsave('AM_neutro_metacluster_DEG.png', width = 3*5, height = 3)
 
-# GSEA Plot
-n_am <- cellList[c(9,10,11,12,28)]
-results <- filter(all_filt_res, cellType %in% n_am)
-n_am_df <- top_GSEA(results, n = 10)
-write.csv(n_am_df, 'fgsea_neutro_AM_frequencies_PCT.csv', row.names = F)
 
-results <- format_GSEA(results, n_am_df, n = 40)
 
-ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
-  geom_point() + cowplot::theme_cowplot() +
-  theme(axis.title.y = element_blank(), 
-        axis.title.x = element_blank(),
-        axis.text.x = element_text(angle = 30, hjust = 1)) + 
-  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('N_AM_GSEA_dot_plot.png', width = 12.5, height = 5)
+
+
 
 # Struct apply to parent (old) --------------------------- 
 
