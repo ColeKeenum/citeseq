@@ -1618,42 +1618,22 @@ ggsave('myeloid_GSEA_08072021.png', width = 10.5, height = 5)
 
 # Done 08072021
 
-
-
-
-
-
-# Struct apply to parent (old) --------------------------- 
-
-# struct <- readRDS('struct_04_23_2021.rds')
-
-
-# Important Violin and Feature Plots ----
+# Important Violin and Feature Plots --------------
 # combined <- readRDS('combined_04_25_2021c.rds')
 # combined <- readRDS('combined_NIH_06222021.rds')
+# combined <- readRDS('combined_07292021_v2.rds')
 
 combined@meta.data$orig.ident <-
   factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+
+Idents(combined) <- 'celltype'
 
 p1 <- VlnPlot(combined, features = c('CD200-TotalA'), idents = c('AT 2'), 
               split.by = 'orig.ident', assay = 'ADT') + NoLegend()
 p2 <- VlnPlot(combined, features = c('CD200r-TotalA'), idents = c('AM'), 
               split.by = 'orig.ident', assay = 'ADT')
 p1 | p2
-ggsave('CD200_ADT.png', width = 10, height = 5)
-
-VlnPlot(combined, features = 'CD19-TotalA', idents = 'B 1', 
-        split.by = 'orig.ident', assay  = 'ADT')
-
-'Ccr2' %in% rownames(combined@assays[["SCT"]]@scale.data)
-
-combined <- ScaleData(combined, features = 'Ccr2')
-VlnPlot(combined, features = 'Ccr2', idents = c('C Mono', 'NC Mono', 'IM', 'cDC 1'), 
-        split.by = 'orig.ident', assay  = 'SCT', slot = 'scale.data')
-
-FeaturePlot(combined, features = c('Il1b', 'S100a8'), reduction = 'wnn.umap')
-
-FeaturePlot(combined, features = c('Ccr2'), reduction = 'wnn.umap')
+ggsave('CD200_ADT_v2.png', width = 10, height = 5)
 
 # Figure 1 Marker ADTs:
 DefaultAssay(combined) <- 'ADT'
@@ -1664,18 +1644,109 @@ for (i in 1:length(adt.to.plot)){
   adt <- paste(adt.to.plot[[i]], '-TotalA', sep = '')
   gg[[i]] <- FeaturePlot(combined, features = adt, reduction = 'wnn.umap',
                          cols = c("lightgrey","darkgreen"), min.cutoff=0, 
-                         max.cutoff = "q99") + 
+                         max.cutoff = "q99") + # NoLegend() +
               theme(axis.title = element_blank(),
                     axis.text = element_blank(),
-                    axis.ticks = element_blank())
+                    axis.ticks = element_blank()) + ggtitle(adt.to.plot[[i]])
 }
-ggsave('Fig1_ADT.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 5),
+ggsave('Fig1_ADT_v2.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 5),
        height = 2*3, width = 5*3)
 
 
-# Neutrophil stuff:
-DefaultAssay(combined) <- 'SCT'
-FeaturePlot(combined, features = 'Cxcr2', reduction = 'wnn.umap')
+
+
+
+p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, 
+             label.size = 4) + NoLegend()
+ggsave("umap_res1.5_lab.png", height = 6, width = 6)
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("umap_res1.5_lab_clean_v2.png", height = 5, width = 5)
+
+# define a function that gets the colors of the clean UMAP
+get_colors <- function(p, obj){
+  # Formatting a vector of colors for DittoSeq plot coloring
+  colors <- ggplot_build(p)$data[[1]]$colour
+  unique_colors <- unique(colors)
+  color_freq <- 1:length(unique_colors)
+  for (i in 1:length(unique_colors)){
+    color <- unique_colors[[i]]
+    color_freq[[i]] <- length(grep(color, colors))
+  }
+  color_freq_desc <- sort(color_freq, decreasing = T)
+  color_names_by_freq <- as.character(1:length(color_freq))
+  for (i in 1:length(color_freq_desc)){
+    color_count <- color_freq_desc[[i]]
+    idx <- which(color_count == color_freq)
+    color_names_by_freq[[i]] <- unique_colors[[idx]]
+  }
+  
+  t3 <- table(obj@active.ident)
+  #write.csv(t2, file = "t3.csv")
+  
+  cell_df <- as.data.frame(t3)
+  color_df <- cbind(data.frame(unique_colors), data.frame(color_freq))
+  color_df <- merge(cell_df, color_df, by.x = "Freq", by.y = "color_freq")
+  colnames(color_df) <- c("Freq", "Celltype", "Color")
+  color_df <- color_df[order(tolower(color_df$Celltype)),]
+  
+  return(color_df)
+}
+
+color_df <- get_colors(p, combined)
+
+# plotting 100% stacked bar chart for cell type distribution by group:
+p <- dittoSeq::dittoBarPlot(object = combined, var = combined@active.ident, group.by = "orig.ident",
+                            scale = c('percent'), color.panel = color_df$Color, 
+                            x.labels.rotate = F, ylab = 'Fraction of Cells')
+p$data$grouping <- factor(x = p$data$grouping, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+p + theme(axis.title.x=element_blank())
+ggsave("celltype_distribution_by_trt_leg_v3.png", width = 6, height = 4.2)
+p + NoLegend()
+ggsave("celltype_distribution_by_trt_noLeg_v3.png", width = 4.2, height = 4.2)
+
+
+# Dimplot Split by Treatment
+p <- DimPlot(combined, reduction = 'wnn.umap', split.by = "orig.ident") + NoLegend()
+# change order in plot: 
+p$data$orig.ident <- factor(x = p$data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24")) 
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave("dimplot_splitby_trt_v3.png", plot = p, width = 15, height = 4)
+
+# 08/08/2021 Old neutro feature plots --------
+# Will port into new neutrophil subs
+load("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data/pre_webGL_workspace.RData")
+FeaturePlot(subset(neutro, orig.ident == 'mp24'), 'Camp') + theme(panel.grid = element_blank(),
+                                                                  axis.title = element_blank(),
+                                                                  axis.text = element_blank(),
+                                                                  axis.ticks = element_blank())
+ggsave('Camp_expression_neutro_v1.png', width = 5, height = 5)
+
+# 08/08/2021 Violin Plots --------'
+combined@meta.data$orig.ident <-
+  factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
+
+# combined <- readRDS('combined_07292021_v2.rds')
+Idents(combined) <- 'celltype'
+VlnPlot(combined, features = c('Cxcl10'), idents = 'Lipofib', split.by = 'orig.ident')
+ggsave('Cxcl10_lipofib.png', width = 4, height = 4)
+VlnPlot(combined, features = c('Ccl4'), idents = 'Lipofib', split.by = 'orig.ident')
+ggsave('Ccl4_lipofib.png', width = 4, height = 4)
+
+
+
+
+
+
+
+
 
 # For Bhawana BMES:
 p <- DimPlot(combined, reduction = 'wnn.umap', group.by = 'orig.ident', shuffle = T)
@@ -1684,7 +1755,7 @@ p <- p + theme(title = element_blank(), legend.position = "none",
                    axis.title = element_blank(),
                    axis.text = element_blank(),
                    axis.ticks = element_blank())
-ggsave('BMES_Bhawana_Cb.png', plot = p, width = 4, height = 2.75)
+ggsave('BMES_Bhawana_Cb_v2.png', plot = p, width = 4, height = 2.75)
 
 
 ###############################################################################
@@ -2148,7 +2219,5 @@ meta_data_small <- meta_data
 # meta_data_small <- meta_data[1:round(length(count_norm[1,])/2), ]
 write.table(meta_data_small, file = 'p4_meta_noQuote.txt', quote=F, sep = "\t", row.names = F, col.names = F)
 
-###############################################################################
-# Cell cycle scoring for all clusters:
 
 
