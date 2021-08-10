@@ -1237,7 +1237,7 @@ degList <- do.call(rbind, degList)
 write.csv(degList, file = "2021-07-29 DEGs.csv")
 saveRDS(combined, 'combined_07292021_v2.rds')
 
-# GSEA (stop,7/29/21)  ---------------------------
+# GSEA  ---------------------------
 library(fgsea)
 library(msigdbr)
 # Edited by MCK based on analysis of Hurskainen et all. 2021 Nat. Comm.
@@ -1502,7 +1502,7 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
         axis.title.x = element_blank(),
         axis.text.x = element_text(angle = 30, hjust = 1)) + 
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
-ggsave('lympho_GSEA_08072021.png', width = 10.5, height = 6)
+ggsave('lympho_GSEA_08072021_v2.png', width = 11.5, height = 6)
 
 # > Endothelial cell subsets ---------------------------
 vec <- c('gCap', 'aCap', 'Vein')
