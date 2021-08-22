@@ -4,28 +4,19 @@ library(patchwork)
 library(Seurat)
 options(stringsAsFactors = FALSE)
 
-setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
+#setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
+setwd('~/Documents/citeseq-code')
 
 # Split up treatment matrices ---------------------------
-#combined <- readRDS('combined_04_25_2021c.rds')
-combined <- readRDS('combined_NIH_06222021.rds')
-
-combined$celltype <- Idents(combined)
+combined <- readRDS('combined_07292021_v2.rds')
 
 Idents(combined) <- 'celltype'
-combined[['RNA']] <- NULL # save memory
-combined[['integratedSCT_']] <- NULL
-combined[['integratedADT_']] <- NULL
+# combined[['RNA']] <- NULL # save memory
+# combined[['integratedSCT_']] <- NULL
+# combined[['integratedADT_']] <- NULL
 
-combined <- RenameIdents(combined, 'cDC 2' = 'NC Mono')
-combined <- RenameIdents(combined, 'NC Mono ' = 'NC Mono') # error in naming earlier
+freq_table <- read.csv('t2_condensed.csv', row.names = 'X')
 
-combined$celltype <- Idents(combined)
-
-freq_table <- read.csv('t2_condensed_nih.csv', row.names = 'X')
-
-# Create metadata colum for celltype + treatment condition
-combined$celltype.trt <- paste(Idents(combined), combined$orig.ident, sep = "_")
 Idents(combined) <- "celltype.trt"
 
 # DEGs will be calculated relative to naive
@@ -33,11 +24,11 @@ DefaultAssay(combined) <- "SCT" # you definitely dont want to do this on integra
 cellList <- unique(combined$celltype)
 cellList <- levels(cellList)
 
-# check freq_table for any celltypes with less than 3 cells in them...
+# check freq_table for any celltypes with less than 10 cells in them...
 # will not include these for DEG analysis
 tmp_cellList <- cellList
 for (i in 1:length(cellList)){
-  if ( any(freq_table[cellList[[i]], ] < 3)){
+  if ( any(freq_table[cellList[[i]], ] < 10)){
     print(cellList[[i]])
     tmp_cellList <- tmp_cellList[tmp_cellList != cellList[i]]
   }
@@ -49,11 +40,7 @@ combined <- subset(combined, idents = cellList)
 
 seurat_list <- SplitObject(combined, split.by = 'orig.ident')
 
-saveRDS(seurat_list, 'split_slim_combined_nih.rds')
-
-rm(combined)
-
-# seurat_list <- readRDS('split_slim_combined_nih.rds')
+saveRDS(seurat_list, 'split_slim_combined_08212021.rds'); rm(combined)
 
 # Preprocessing function  ---------------------------
 preprocess <- function(dgCMatrix, meta){
@@ -112,7 +99,7 @@ meta.naive <- seurat_list$naive@meta.data[c('celltype')]
 cc_naive <- preprocess(data.naive, meta.naive)
 
 rm(data.naive)
-saveRDS(cc_naive, 'cc_naive_06222021.rds')
+saveRDS(cc_naive, 'cc_naive_08212021.rds')
 
 # > Visualize  ---------------------------
 groupSize <- as.numeric(table(cc_naive@idents))
@@ -184,14 +171,14 @@ netVisual_heatmap(cc_naive, signaling = pathways.show, color.heatmap = "Reds")
 #> Do heatmap based on a single object
 
 # > Identify Signaling Roles  ---------------------------
-# cc_naive <- readRDS('cc_naive_06222021.rds')
+# cc_naive <- readRDS('cc_naive_08212021.rds')
 
 # Compute the network centrality scores
 cc_naive <- netAnalysis_computeCentrality(cc_naive, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_naive, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_naive, 'cc_naive_network_06222021.rds')
+saveRDS(cc_naive, 'cc_naive_network_08212021.rds')
 
 rm(cc_naive)
 
@@ -200,7 +187,7 @@ data.p4 <- GetAssayData(object = seurat_list$p4, assay = 'SCT', slot = "data")
 meta.p4 <- seurat_list$p4@meta.data[c('celltype')]
 cc_p4 <- preprocess(data.p4, meta.p4)
 
-rm(data.p4, meta.p4); saveRDS(cc_p4, 'cc_p4_06222021.rds')
+rm(data.p4, meta.p4); saveRDS(cc_p4, 'cc_p4_08212021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_p4@idents))
@@ -233,14 +220,14 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_p4, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_p4 <- readRDS('cc_p4_06222021.rds')
+# cc_p4 <- readRDS('cc_p4_08212021.rds')
 
 # Compute the network centrality scores
 cc_p4 <- netAnalysis_computeCentrality(cc_p4, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_p4, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_p4, 'cc_p4_network_06222021.rds')
+saveRDS(cc_p4, 'cc_p4_network_08212021.rds')
 
 rm(cc_p4)
 
@@ -249,7 +236,7 @@ data.mp4 <- GetAssayData(object = seurat_list$mp4, assay = 'SCT', slot = "data")
 meta.mp4 <- seurat_list$mp4@meta.data[c('celltype')]
 cc_mp4 <- preprocess(data.mp4, meta.mp4)
 
-rm(data.mp4, meta.mp4); saveRDS(cc_mp4, 'cc_mp4_06222021.rds')
+rm(data.mp4, meta.mp4); saveRDS(cc_mp4, 'cc_mp4_08212021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_mp4@idents))
@@ -282,14 +269,14 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_mp4, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_mp4 <- readRDS('cc_mp4_06222021.rds')
+# cc_mp4 <- readRDS('cc_mp4_08212021.rds')
 
 # Compute the network centrality scores
 cc_mp4 <- netAnalysis_computeCentrality(cc_mp4, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_mp4, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_mp4, 'cc_mp4_network_06222021.rds')
+saveRDS(cc_mp4, 'cc_mp4_network_08212021.rds')
 
 rm(cc_mp4)
 
@@ -298,7 +285,7 @@ data.p24 <- GetAssayData(object = seurat_list$p24, assay = 'SCT', slot = "data")
 meta.p24 <- seurat_list$p24@meta.data[c('celltype')]
 cc_p24 <- preprocess(data.p24, meta.p24)
 
-rm(data.p24, meta.p24); saveRDS(cc_p24, 'cc_p24_06222021.rds')
+rm(data.p24, meta.p24); saveRDS(cc_p24, 'cc_p24_08212021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_p24@idents))
@@ -331,14 +318,14 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_p24, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_p24 <- readRDS('cc_p24_06222021.rds')
+# cc_p24 <- readRDS('cc_p24_08212021.rds')
 
 # Compute the network centrality scores
 cc_p24 <- netAnalysis_computeCentrality(cc_p24, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_p24, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_p24, 'cc_p24_network_06222021.rds')
+saveRDS(cc_p24, 'cc_p24_network_08212021.rds')
 
 rm(cc_p24)
 
@@ -347,7 +334,7 @@ data.mp24 <- GetAssayData(object = seurat_list$mp24, assay = 'SCT', slot = "data
 meta.mp24 <- seurat_list$mp24@meta.data[c('celltype')]
 cc_mp24 <- preprocess(data.mp24, meta.mp24)
 
-rm(data.mp24, meta.mp24); saveRDS(cc_mp24, 'cc_mp24_06222021.rds')
+rm(data.mp24, meta.mp24); saveRDS(cc_mp24, 'cc_mp24_08212021.rds')
 
 # Visualize top = 0.1
 groupSize <- as.numeric(table(cc_mp24@idents))
@@ -380,24 +367,24 @@ par(mfrow=c(1,1))
 netVisual_heatmap(cc_mp24, signaling = pathways.show, color.heatmap = "Reds")
 
 # > Identify Signaling Roles  ---------------------------
-# cc_mp24 <- readRDS('cc_mp24_06222021.rds')
+# cc_mp24 <- readRDS('cc_mp24_08212021.rds')
 
 # Compute the network centrality scores
 cc_mp24 <- netAnalysis_computeCentrality(cc_mp24, slot.name = "netP") # the slot 'netP' means the inferred intercellular communication network of signaling pathways
 # Visualize the computed centrality scores using heatmap, allowing ready identification of major signaling roles of cell groups
 netAnalysis_signalingRole_network(cc_mp24, signaling = pathways.show, width = 8, height = 2.5, font.size = 10)
 
-saveRDS(cc_mp24, 'cc_mp24_network_06222021.rds')
+saveRDS(cc_mp24, 'cc_mp24_network_08212021.rds')
 
 rm(cc_mp24)
 
-# CCL-CCR Signaling  ---------------------------
+# (old) CCL-CCR Signaling  ---------------------------
 
-cc_naive <- readRDS('cc_naive_network_06222021.rds')
-cc_p4 <- readRDS('cc_p4_network_06222021.rds')
-cc_mp4 <- readRDS('cc_mp4_network_06222021.rds')
-cc_p24 <- readRDS('cc_p24_network_06222021.rds')
-cc_mp24 <- readRDS('cc_mp24_network_06222021.rds')
+cc_naive <- readRDS('cc_naive_network_08212021.rds')
+cc_p4 <- readRDS('cc_p4_network_08212021.rds')
+cc_mp4 <- readRDS('cc_mp4_network_08212021.rds')
+cc_p24 <- readRDS('cc_p24_network_08212021.rds')
+cc_mp24 <- readRDS('cc_mp24_network_08212021.rds')
 
 pathways.show <- c('CCL')
 
@@ -420,7 +407,7 @@ LR.show <- pairLR.CCL[c(6,8),] # show one ligand-receptor pair
 netVisual_individual(cc_naive, signaling = pathways.show,  
                      pairLR.use = LR.show, layout = 'circle')
 
-# Combined Analysis  ---------------------------
+# (old) Combined Analysis  ---------------------------
 object.list <- cc_list
 cellchat <- mergeCellChat(cc_list, add.names = trtList)
 
