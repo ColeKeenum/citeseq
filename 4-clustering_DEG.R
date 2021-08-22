@@ -1619,8 +1619,6 @@ ggsave('myeloid_GSEA_08072021.png', width = 10.5, height = 5)
 # Done 08072021
 
 # Important Violin and Feature Plots --------------
-# combined <- readRDS('combined_04_25_2021c.rds')
-# combined <- readRDS('combined_NIH_06222021.rds')
 # combined <- readRDS('combined_07292021_v2.rds')
 
 combined@meta.data$orig.ident <-
@@ -1652,10 +1650,7 @@ for (i in 1:length(adt.to.plot)){
 ggsave('Fig1_ADT_v2.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 5),
        height = 2*3, width = 5*3)
 
-
-
-
-
+# Plotting a more clean UMAP:
 p <- DimPlot(combined, reduction = 'wnn.umap', label = TRUE, repel = TRUE, 
              label.size = 4) + NoLegend()
 ggsave("umap_res1.5_lab.png", height = 6, width = 6)
@@ -1708,7 +1703,6 @@ ggsave("celltype_distribution_by_trt_leg_v3.png", width = 6, height = 4.2)
 p + NoLegend()
 ggsave("celltype_distribution_by_trt_noLeg_v3.png", width = 4.2, height = 4.2)
 
-
 # Dimplot Split by Treatment
 p <- DimPlot(combined, reduction = 'wnn.umap', split.by = "orig.ident") + NoLegend()
 # change order in plot: 
@@ -1740,14 +1734,6 @@ ggsave('Cxcl10_lipofib.png', width = 4, height = 4)
 VlnPlot(combined, features = c('Ccl4'), idents = 'Lipofib', split.by = 'orig.ident')
 ggsave('Ccl4_lipofib.png', width = 4, height = 4)
 
-
-
-
-
-
-
-
-
 # For Bhawana BMES:
 p <- DimPlot(combined, reduction = 'wnn.umap', group.by = 'orig.ident', shuffle = T)
 p <- p + theme(title = element_blank(), legend.position = "none",
@@ -1757,24 +1743,29 @@ p <- p + theme(title = element_blank(), legend.position = "none",
                    axis.ticks = element_blank())
 ggsave('BMES_Bhawana_Cb_v2.png', plot = p, width = 4, height = 2.75)
 
+# DEGs for mp vs. p treatments at 4 and 24 hours ------------
+# Do not parallelize this section. Errors happen when calculating DEGs.
+# combined <- readRDS('combined_07292021_v2.rds')
 
-###############################################################################
-# Generating DEGs relative for mp vs. p treatments at 4 and 24 hours
-
-#combined <- readRDS("02-05-2020 Clustering.V2.rds")
+freq_table <- read.csv('t2_condensed.csv', row.names = 'X')
 
 Idents(combined) <- "celltype.trt"
-DefaultAssay(combined) <- "RNA"
 
-# cellList <- list("Lipo Fibroblasts",
-#                  "gCap Endothelial",
-#                  "AT1",
-#                  "Neutrophils",
-#                  "CD103+ DC", 
-#                  "Alveolar Macro")
+# DEGs will be calculated relative to naive
+DefaultAssay(combined) <- "SCT" 
+cellList <- unique(combined$celltype)
+cellList <- levels(cellList)
 
-cellList <- c("gCap Endothelial",
-              "AT1")
+# check freq_table for any celltypes with less than 3 cells in them...
+# will not include these for DEG analysis
+tmp_cellList <- cellList
+for (i in 1:length(cellList)){
+  if ( any(freq_table[cellList[[i]], ] < 3)){
+    print(cellList[[i]])
+    tmp_cellList <- tmp_cellList[tmp_cellList != cellList[i]]
+  }
+}
+cellList <- tmp_cellList; rm(tmp_cellList)
 
 degList <- vector(mode = "list", length = length(cellList)*2)
 timepoints <- c("4", "24")
@@ -1830,8 +1821,8 @@ for (i in 1:length(x = cellList)){
   }
 }
 
-saveRDS(degList, "2021-02-12 big DEG List mp vs p.rds")
-saveRDS(graphList, "2021-02-12 big Graph List mp vs p.rds")
+saveRDS(degList, "2021-08-21 DEG List mp vs p.rds")
+saveRDS(graphList, "2021-08-21 Graph List mp vs p.rds")
 
 #degList <- readRDS("2021-02-11 DEG List mp vs p.rds")
 #graphList <- readRDS("2021-02-11 Graph List mp vs p.rds")
@@ -1847,7 +1838,9 @@ for (i in 1:length(x = graphList)){
 }
 
 degList <- do.call(rbind, degList)
-write.csv(degList, file = "2021-02-12 mp vs. p DEGs for Epithelial, Endo, Fibroblast, and Myeloid-Derived Cells.csv")
+write.csv(degList, file = "2021-08-21 mp vs. p DEGs.csv")
+
+
 
 ################################################################################
 # Plotting interesting features
@@ -2091,133 +2084,3 @@ for (i in 1:length(x = graphList)){
 
 degList <- do.call(rbind, degList)
 write.csv(degList, file = "2021-02-23 DEGs for Epithelial, Endo, Fibroblast, and Myeloid-Derived Cells.csv")
-
-###############################################################################
-# Exporting information for CellPhoneDB:
-combined <- readRDS("02-05-2020 Clustering.V2.rds")
-
-Idents(combined) <- "orig.ident"
-
-# Trying for naive first
-
-# Take raw data and normalize it:
-# There may be a better way to normalize, but can follow the Efremova et al. 2020 Nature Protocol
-
-#naive <- subset(combined, idents = "naive")
-#p4 <- subset(combined, idents = "p4")
-mp4 <- subset(combined, idents = "mp4")
-
-rm(combined)
-
-library(tibble)
-library(biomaRt)
-library(tidyr)
-library(dplyr)
-
-naive <- mp4 #FAKE
-
-count_raw <- naive[["RNA"]]@counts
-
-count_norm <- NormalizeData(object = count_raw, normalization.method = "LogNormalize",
-                            scale.factor = 10000, verbose = TRUE)
-#count_norm <- apply(count_raw, 2, function(x) (x/sum(x))*10000) #from Efremova et al.
-
-allgenes <- rownames(naive)
-count_norm <- as.data.frame(count_norm)
-#unsure if this is good or bad due to null dist calculations in CellPhoneDB:
-count_norm <- count_norm[rowSums(count_norm[,2:dim(count_norm)[2]])!=0,]
-
-# CellPhoneDB can only use human genes, so need to convert mouse to human orthologs
-human <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl")
-mouse <- useEnsembl("ensembl", dataset = "mmusculus_gene_ensembl")
-# see values = if there is a problem with the next line
-genesV2 <- getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = rownames(naive@assays$RNA@data), mart = mouse, attributesL = c("hgnc_symbol","hgnc_id",'ensembl_gene_id'), martL = human, uniqueRows=T)
-head(genesV2)
-
-#count_norm <- count_norm[match(genesV2$MGI.symbol, rownames(naive), nomatch=F),] # old way errors
-count_norm <- count_norm[match(genesV2$MGI.symbol, rownames(count_norm)),]
-count_norm$gene <- genesV2$Gene.stable.ID
-
-# remove NA rows... this might be bad
-to_keep <- !is.na(count_norm[,1])
-count_norm <- count_norm[to_keep, ]
-
-# iterating through genes, non-unique expression values will be summed
-# alternative: max or bitwiseor
-
-unique_genes <- unique(count_norm$gene)
-num_col <- length(count_norm[1,])
-
-# ISSUE: NEED TO DEAL WITH NA ROWS! Not sure where they come from.
-
-for (i in 1:length(unique_genes)){
-  g <- unique_genes[i] # target gene
-  
-  if (sum(count_norm$gene == g) == 1){next}
-  print(i)
-  
-  rs <- count_norm[count_norm$gene == g, ] # rows of interest
-  # rs <- rs[!is.na(rs[,1]), ] # removing NA terms..
-  gSum <- colSums(rs[!is.na(rs[,1]), ][, 1:(num_col-1) ] ) # NEED TO FIX bc slow
-  
-  idx <- match(g, count_norm$gene) # will be the only index for this gene, its first time in the matrix
-  count_norm[idx, 1:(num_col-1)] <- gSum
-  
-  to_remove <- count_norm$gene == g
-  to_remove[idx] <- FALSE # saving the one row
-  
-  count_norm <- count_norm[!to_remove, ]
-}
-
-saveRDS(count_norm, file = "count_mp4_maybeSketchy.rds")
-
-#reordering column names:
-col_n <- c(num_col, 1:num_col-1)
-count_norm <- count_norm[, col_n]
-
-write.table(count_norm, 'mp4_count.txt', sep='\t', row.names = F)
-
-# Generating metadata file.
-meta_data <- cbind(rownames(naive@meta.data), naive@meta.data[,'celltype', drop=F])
-write.table(meta_data, 'mp4_meta.txt', sep='\t', quote=F, row.names=F)
-
-################## Debugging p4
-count_norm <- read.table(file = 'mp4_count.txt', sep = "\t")
-cnames <- count_norm[1,]
-meta_data <- read.table(file = 'mp4_meta.txt', sep = "\t")
-rnames <- meta_data[,1]
-
-#write.table(count_norm, 'p4_count_noQuote.txt', sep='\t', quote = F, row.names = F, col.names = F)
-#write.table(meta_data, file = 'p4_meta_noQuote.txt', quote=F, sep = "\t", row.names = F, col.names = F)
-
-# cnames and rnames are of equal length, spotchecks verified
-
-len <- dim(count_norm)[1]
-
-colnames(count_norm) <- cnames
-count_norm <- count_norm[2:len, ]
-
-numgenes <- dim(count_norm)[1]
-
-# count_norm_small <- count_norm[, 1:51] # testing 50 cells
-# count_norm_small <- count_norm[1:round(length(count_norm[1,])/2), ] # top half
-#topLine <- colnames(count_norm)
-#count_norm_small <- count_norm[round(length(count_norm[1,])/2)+1:length(count_norm[1,]), ] # bottom half
-#count_norm_small <- count_norm[1:round(length(count_norm[1,])/8), ] # top eighth 
-
-#count_norm_small <- count_norm[1:floor(numgenes/16), ] # top 16th
-#count_norm_small <- count_norm[1:floor(numgenes/32), ] # top 32nd
-#count_norm_small <- count_norm[floor(numgenes/16)+1:floor(numgenes/8), ] # second 16th 
-#count_norm_small <- count_norm[floor(numgenes/32)+1:floor(numgenes/32)+1, ] # second 32nd 
-
-#count_norm_small <- rbind(topLine, count_norm_small) # required to have cell names
-# saveRDS(count_norm_small, file = "count_p4_topHalf_maybeSketchy.rds")
-write.table(count_norm, 'mp4_count_noQuote.txt', sep='\t', quote = F, row.names = F, col.names = F)
-
-# meta_data_small <- meta_data[1:51, ]
-meta_data_small <- meta_data
-# meta_data_small <- meta_data[1:round(length(count_norm[1,])/2), ]
-write.table(meta_data_small, file = 'p4_meta_noQuote.txt', quote=F, sep = "\t", row.names = F, col.names = F)
-
-
-
