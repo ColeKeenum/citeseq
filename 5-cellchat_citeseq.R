@@ -378,19 +378,55 @@ saveRDS(cc_mp24, 'cc_mp24_network_08212021.rds')
 
 rm(cc_mp24)
 
-# (old) CCL-CCR Signaling  ---------------------------
-
+# Combined Signaling  ---------------------------
+# Generate combined CellChat object
 cc_naive <- readRDS('cc_naive_network_08212021.rds')
 cc_p4 <- readRDS('cc_p4_network_08212021.rds')
 cc_mp4 <- readRDS('cc_mp4_network_08212021.rds')
 cc_p24 <- readRDS('cc_p24_network_08212021.rds')
 cc_mp24 <- readRDS('cc_mp24_network_08212021.rds')
 
+trtList <- c("naive", "p4", "mp4", "p24", "mp24")
+
+object.list <- list(cc_naive,
+                    cc_p4,
+                    cc_mp4,
+                    cc_p24,
+                    cc_mp24)
+cellchat <- mergeCellChat(object.list, add.names = trtList)
+
+# Calculate basic interaction metrics:
+gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5))
+gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5), measure = "weight")
+gg1 + gg2
+ggsave('interactions_metrics_compared.png', width = 16, height = 4)
+
+# Will compare 1,2 and 1,3 for 4 hour treatments
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+#netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+netVisual_diffInteraction(cellchat, comparison = c(1,3), weight.scale = T, measure = "weight", top = 0.1)
+
+# Will compare 1,4 and 1,5 for 24 hour treatments
+par(mfrow = c(1,2), xpd=TRUE)
+netVisual_diffInteraction(cellchat, comparison = c(1,4), weight.scale = T, measure = "weight", top = 0.1)
+#netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+netVisual_diffInteraction(cellchat, comparison = c(1,5), weight.scale = T, measure = "weight", top = 0.1)
+
+
+
+
+
+
+
+# (old) CCL-CCR Signaling  ---------------------------
+
+
+
 pathways.show <- c('CCL')
 
 cc_list <- list(cc_naive, cc_p4, cc_mp4, cc_p24, cc_mp24)
 plot_list <- vector(mode = 'list', length = length(cc_list))
-trtList <- c("naive", "p4", "mp4", "p24", "mp24")
 
 for (i in 1:length(cc_list)){
   plot_list[[i]] <- netAnalysis_contribution(cc_list[[i]], signaling = pathways.show,
