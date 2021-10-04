@@ -399,7 +399,7 @@ cellchat <- mergeCellChat(object.list, add.names = trtList)
 gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5))
 gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5), measure = "weight")
 gg1 + gg2
-ggsave('interactions_metrics_compared.png', width = 16, height = 4)
+ggsave('interactions_metrics_compared.png', width = 8, height = 4)
 
 # Will compare 1,2 and 1,3 for 4 hour treatments
 par(mfrow = c(1,2), xpd=TRUE)
@@ -413,80 +413,12 @@ netVisual_diffInteraction(cellchat, comparison = c(1,4), weight.scale = T, measu
 #netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
 netVisual_diffInteraction(cellchat, comparison = c(1,5), weight.scale = T, measure = "weight", top = 0.1)
 
-
-
-
-
-
-
-# (old) CCL-CCR Signaling  ---------------------------
-
-
-
-pathways.show <- c('CCL')
-
-cc_list <- list(cc_naive, cc_p4, cc_mp4, cc_p24, cc_mp24)
-plot_list <- vector(mode = 'list', length = length(cc_list))
-
-for (i in 1:length(cc_list)){
-  plot_list[[i]] <- netAnalysis_contribution(cc_list[[i]], signaling = pathways.show,
-                                             title = trtList[[i]])
-}
-cowplot::plot_grid(plotlist = plot_list, ncol = 5)
-ggsave('CCL_CCR_signaling_netAnalysis_nih.png', width = 15, height = 4)
-
-pairLR.CCL <- extractEnrichedLR(cc_naive, signaling = pathways.show, 
-                                geneLR.return = FALSE)
-LR.show <- pairLR.CCL[c(6,8),] # show one ligand-receptor pair
-
-# Hierarchy plot
-netVisual_individual(cc_naive, signaling = pathways.show,  
-                     pairLR.use = LR.show, layout = 'circle')
-
-# (old) Combined Analysis  ---------------------------
-object.list <- cc_list
-cellchat <- mergeCellChat(cc_list, add.names = trtList)
-
-gg1 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5))
-gg2 <- compareInteractions(cellchat, show.legend = F, group = c(1,2,3,4,5), measure = "weight")
-gg1 + gg2
-ggsave('interactions_compared.png', width = 10, height = 5)
-
-# Will compare 1,2 and 1,3 for 4 hour treatments
+# Will compare 1,4 and 4,5 for 24 hour treatments (figure 1/2)
 par(mfrow = c(1,2), xpd=TRUE)
-netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
+netVisual_diffInteraction(cellchat, comparison = c(1,4), weight.scale = T, measure = "weight", top = 0.2)
 #netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
-netVisual_diffInteraction(cellchat, comparison = c(1,3), weight.scale = T, measure = "weight", top = 0.1)
+netVisual_diffInteraction(cellchat, comparison = c(4,5), weight.scale = T, measure = "weight", top = 0.2)
 
-# Will compare 1,4 and 1,5 for 24 hour treatments
-par(mfrow = c(1,2), xpd=TRUE)
-netVisual_diffInteraction(cellchat, comparison = c(1,4), weight.scale = T, measure = "weight", top = 0.1)
-#netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
-netVisual_diffInteraction(cellchat, comparison = c(1,5), weight.scale = T, measure = "weight", top = 0.1)
-
-# these should be best exported as legal paper pdfs in Rstudio
-
-# Will compare 1,4
-par(mfrow = c(1,2), xpd=TRUE)
-netVisual_diffInteraction(cellchat, weight.scale = T, top = 0.1, 
-                          comparison = c(1,4))
-netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight",
-                          top = 0.1, comparison = c(1,4))
-
-
-
-
-
-
-weight.max <- getMaxWeight(object.list, attribute = c("idents","count"))
-par(mar=c(1,1,1,1))
-par(mfrow = c(1,5))
-for (i in 1:length(object.list)) {
-  netVisual_circle(object.list[[i]]@net$count, weight.scale = T, label.edge= F, edge.weight.max = weight.max[2], edge.width.max = 12, title.name = paste0("Number of interactions - ", names(object.list)[i]))
-}
-
-# Error in netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i],  : 
-# Please run `netAnalysis_computeCentrality` to compute the network centrality scores! 
 
 # Compare the major sources and targets in 2D space
 num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
@@ -495,10 +427,14 @@ gg <- list()
 for (i in 1:length(object.list)) {
   gg[[i]] <- netAnalysis_signalingRole_scatter(object.list[[i]], title = names(object.list)[i], weight.MinMax = weight.MinMax) + NoLegend()
 }
-#> Signaling role analysis on the aggregated cell-cell communication network from all signaling pathways
 ggsave('sources_and_targets.png', plot = gg[[1]] | gg[[2]] | gg[[3]] | gg[[4]] | gg[[5]],
        width = 4*5, height = 4)
 
+
+
+
+
+# old ----
 interest <- c('aCap', 'N A', 'N B', 'N C', 'AM', 'Adv Fib')
 
 for (i in 1:length(interest)){
