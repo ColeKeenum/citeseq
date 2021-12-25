@@ -2,3 +2,5 @@ cellchat_vignette.R
 signac_pbmc_vignette.R
 muscat_vignette.R
 scVelo_vignette.R
+.ipynb_checkpoints/
+old_scVelo_script.ipynb

@@ -520,7 +520,7 @@ saveRDS(combined, 'combined_07122021.rds')
 # combined <- readRDS('combined_07122021.rds')
 
 # Neutrophil (N) Subclustering  ---------------------------
-Idents(combined) <- 'celltype'
+Idents(comDbined) <- 'celltype'
 neutro <- subset(combined, idents = 'N'); rm(combined)
 
 DefaultAssay(neutro) <- 'RNA'
@@ -1723,7 +1723,7 @@ FeaturePlot(subset(neutro, orig.ident == 'mp24'), 'Camp') + theme(panel.grid = e
                                                                   axis.ticks = element_blank())
 ggsave('Camp_expression_neutro_v1.png', width = 5, height = 5)
 
-# 08/08/2021 Violin Plots --------'
+# 08/08/2021 Violin Plots --------
 combined@meta.data$orig.ident <-
   factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
 
@@ -1840,247 +1840,85 @@ for (i in 1:length(x = graphList)){
 degList <- do.call(rbind, degList)
 write.csv(degList, file = "2021-08-21 mp vs. p DEGs.csv")
 
+# Exporting UMAP coordinates for scVelo -----
+# combined <- readRDS('combined_07292021_v2.rds')
+Idents(combined) <- 'celltype'
+
+# Cluster based off unintegrated SCT values:
+DefaultAssay(combined) <- "SCT"
+VariableFeatures(combined) <- rownames(combined)
+combined <- RunPCA(combined, assay = 'SCT', verbose = T, reduction.name = 'sct_unintPC', reduction.key = 'sct_unintPC_')
+ElbowPlot(combined, ndims = 50, reduction = 'sct_unintPC')
+ggsave("elbow_plot_combined_sct_non_integrated.png")
+combined <- RunUMAP(combined, reduction = 'sct_unintPC', dims = 1:40, assay = 'SCT', 
+                  reduction.name = 'sct.umap.unint', reduction.key = 'sct.umap.unint_')
+DimPlot(combined, reduction = 'sct.umap.unint', label = T, repel = T) + NoLegend()
+ggsave('combined_unintegrated.png', width = 5, height = 5)
+
+DimPlot(combined, reduction = 'sct.umap.unint', split.by = 'orig.ident')
+ggsave('combined_unintegrated_split.png', width = 5*5, height = 5)s
+
+Idents(combined) <- 'orig.ident'
+DimPlot(combined, reduction = 'sct.umap.unint') 
+ggsave('combined_sct_unint_orig_ident.png', width = 6, height = 5)
+
+# Remove cells not in the UMAP region: -5 to +5 and less than -1 approx.
+# Likely small amount of doublets
+Idents(combined) <- 'celltype'
+neutro <- subset(combined, idents = 'N')
+plot <- DimPlot(neutro, reduction = 'sct.umap.unint')
+dubs <- CellSelector(plot = plot)
+dubs
+# [1] "p4_GATTCTTGTCGGCCTA-1"   "p24_ACAGAAAGTAAGGCCA-1"  "p24_TGCATGATCAGTGATC-1"  "mp24_CGCGTGAGTAGCTTTG-1"
+dubs2 <- CellSelector(plot = plot)
+dubs2
+# [1] "p24_TGTCCACCACTCGATA-1"  "mp24_GGGTGAAAGCCGATAG-1" "mp24_GTGCTTCCAGTTAAAG-1"
+neutro <- subset(neutro, cells = c(dubs, dubs2), invert = TRUE)
+
+# Plot with labeled orig.ident:
+Idents(neutro) <- 'orig.ident'
+DimPlot(neutro, reduction = 'sct.umap.unint')
+ggsave('neutro_orig_ident.png', width = 6, height = 5)
+
+# Find distinct phenotypic states of neutrophils:
+neutro <- FindNeighbors(neutro, reduction = 'sct_unintPC')
+neutro <- FindClusters(neutro, resolution = 0.2)
+DimPlot(neutro)
+ggsave('neutro_res0.2_clustering.png', width = 6, height = 5)
+
+saveRDS(neutro, 'neutro.trimmed.clusteredrds')
+# neutro <- readRDS('neutro.trimmed.clustered.rds')
+
+# Extracting metadata including unintegrated UMAP coordinates
+# From: https://github.com/basilkhuder/Seurat-to-RNA-Velocity
+write.csv(Cells(neutro), file = "cellID_obs.csv", row.names = FALSE)
+write.csv(Embeddings(neutro, reduction = "sct.umap.unint"), file = "cell_embeddings.csv")
+write.csv(neutro@meta.data$seurat_clusters, file = "clusters.csv")
 
 
-################################################################################
-# Plotting interesting features
-#combined <- readRDS("02-05-2020 Clustering.V2.rds")
-
-combined@meta.data$orig.ident <-
-  factor(x = combined@meta.data$orig.ident, levels = c("naive", "p4", "mp4", "p24", "mp24"))
-
-# this should be done above
-DefaultAssay(combined) <- "RNA"
-# combined <- ScaleData(combined) # not enough memory
-
-cellList <- c("Ebf1+ Fibroblasts",
-              "Myofibroblasts",
-              "Lipo Fibroblasts",
-              "Lymphatic Fibroblasts",
-              "aCap Endothelial",
-              "Vein Endothelial",
-              "gCap Endothelial",
-              "AT1",
-              "AT2",
-              "Myeloid Cells",
-              "Neutrophils",
-              "Eosinophils",
-              "Alveolar Macro",
-              "Interstitial Macro",
-              "CD103+ DC",
-              "Classical Mono",
-              "Non-classical Mono")
-
-# looking for IL17 signaling
-il17.genes <- c("Il17a", 
-                "Il17b",
-                "Il17c",
-                "Il17d",
-                "Il25",
-                "Il17f",
-                "Il23a") #IL-25 is an alias for IL-17e
-
-combined <- ScaleData(combined, features = il17.genes, assay = "RNA")
-
-DotPlot(combined, features = il17.genes, idents = cellList.trt) # nothing much
-
-#### looking for NF-kB genes
-
-nfkb.genes <- c("Nfkb1", "Nfkb2", "Rela", "Nfkbia", "Ikbkb", "Cebpb", 
-                "S100a7a", "S100a8", "S100a9", "Lcn2")
-
-combined <- ScaleData(combined, features = nfkb.genes, assay = "RNA")
-
-# seems like a lot for naive mice w/ Nuocytes
-VlnPlot(combined, features = c("Nfkb1"), idents = c("Nuocytes"), split.by = "orig.ident")
-
-Idents(combined) <- "celltype"
-allCellTypes <- as.character(unique(Idents(combined)))
-allCellTypes.trt <- vector(mode = "character", length = length(allCellTypes)*5)
-
-Idents(combined) <- "celltype.trt"
-
-cellList.trt <- vector(mode = "character", length = length(cellList)*5)
-trtList <- c("naive", "p4", "mp4", "p24", "mp24")
-
-for (i in 1:length(cellList)){
-  for (j in 1:length(trtList)){
-    cellList.trt[(i-1)*5 + j] <- paste(cellList[[i]], trtList[[j]], sep = "_")
-  }
-}
-
-for (i in 1:length(allCellTypes)){
-  for (j in 1:length(trtList)){
-    allCellTypes.trt[(i-1)*5 + j] <- paste(allCellTypes[[i]], trtList[[j]], sep = "_")
-  }
-}
-
-combined@active.ident <- factor(combined@active.ident, levels = allCellTypes.trt)
-
-DotPlot(combined, features = c("Nfkb1", "Nfkb2", "Rela", "Nfkbia", "Ikbkb", "Cebpb"), idents = cellList.trt[31:35])
-DotPlot(combined, features = c("S100a7a", "S100a8", "S100a9", "Lcn2"), idents = cellList.trt[31:35])
-VlnPlot(combined, features = c("S100a8"), idents = cellList.trt[31:35])
-
-# Caspases: Genes for 5, 10, 11 not present in mouse, but casp11 protein is coded by casp4 gene (ugh)
-
-casp.genes <- c("Casp1", "Casp2", "Casp3", "Casp4", "Casp5", 
-                "Casp6", "Casp7", "Casp8", "Casp9", "Casp10", 
-                "Casp11", "Casp12", "Casp14", 
-                "Apaf1", "Cycs", "Gsdmd", "Trpc1", "Fas", "Fadd", "Ifih1", "Calr")
-combined <- ScaleData(combined, features = casp.genes)
-
-# all cell types I want
-p <- DotPlot(combined, 
-             features = casp.genes, idents = cellList.trt, cols = c("blue", "red")) + 
-  theme(text = element_text(size=8, family = "sans"), axis.text = element_text(size=8, family = "sans"))
-ggsave(filename = "caspGenesDotPlot.tiff", plot = p, width = 8.5, height = 14)
-
-# plotting only relevant casp and related genes
-relevant.casp.genes <- casp.genes <- c("Casp1", "Casp3", "Casp4", "Casp5", "Gsdmd",
-                                       "Casp6", "Casp7", "Casp8", "Fas", "Ifih1", "Calr",
-                                       "Casp9", "Apaf1", "Cycs",  "Trpc1")
-p <- DotPlot(combined, 
-             features = casp.genes, idents = cellList.trt, cols = c("blue", "red")) + 
-  theme(text = element_text(size=8, family = "sans"), axis.text = element_text(size=8, family = "sans"))
-ggsave(filename = "caspGenesDotPlot.onlyExpressed.tiff", plot = p, width = 8.5, height = 14)
-
-#### looking for IRFs and related genes
-irf.genes <- c("Irf1", "Irf2", "Irf3", "Irf4", "Irf5", "Irf6", "Irf7", "Irf8", "Irf9")
-combined <- ScaleData(combined, features = irf.genes)
-
-p <- DotPlot(combined, 
-             features = irf.genes, idents = cellList.trt, cols = c("blue", "red")) + 
-  theme(text = element_text(size=8, family = "sans"), axis.text = element_text(size=8, family = "sans"))
-ggsave(filename = "irfGenes.tiff", plot = p, width = 8.5, height = 14)
-
-#### misc genes
-
-# cxcl6 = cxcl5 in mice
-cxcl.genes <- c("Cxcl1", "Cxcl2", "Cxcl3", "Pf4", "Cxcl5", "Cxcl9",
-                "Cxcl10", "Cxcl11", "Cxcl12", "Cxcl13", "Cxcl14", "Cxcl15",
-                "Cxcr1","Cxcr2", "Cxcr3", "Cxcr4")
-combined <- ScaleData(combined, cxcl.genes)
-p <- DotPlot(combined, 
-             features = cxcl.genes, idents = cellList.trt, cols = c("blue", "red")) + 
-  theme(text = element_text(size=8, family = "sans"), axis.text = element_text(size=8, family = "sans"))
-ggsave(filename = "cxclGenes.tiff", plot = p, width = 8.5, height = 14)
 
 
-# S100 and other inflammatory genes
-inflam.genes <- c("S100a8", "S100a9", "Lcn2", "Mt1", "Mt2", "Ngp", "Saa3")
-combined <- ScaleData(combined, inflam.genes)
-p <- DotPlot(combined, 
-             features = inflam.genes, idents = cellList.trt, cols = c("blue", "red")) + 
-  theme(text = element_text(size=8, family = "sans"), axis.text = element_text(size=8, family = "sans"))
-ggsave(filename = "inflammatoryGenes.tiff", plot = p, width = 8.5, height = 14)
-
-# Endothelial genes/adt for proliferation from Niethamer et al.
-endoCells <- c("gCap Endothelial", "aCap Endothelial", "Vein Endothelial")
-
-endoCells.trt <- vector(mode = "character", length = length(cellList)*5)
-trtList <- c("naive", "p4", "mp4", "p24", "mp24")
-
-for (i in 1:length(endoCells)){
-  for (j in 1:length(trtList)){
-    endoCells.trt[(i-1)*5 + j] <- paste(endoCells[[i]], trtList[[j]], sep = "_")
-  }
-}
-
-Idents(combined) <- "celltype.trt"
-
-VlnPlot(combined, features = c("CD34-TotalA", "CD309-TotalA"), 
-        assay = "integratedADT_", 
-        idents = endoCells.trt)
-
-endoRNA <- c("Cd34", "Kdr", "Car4", "Mki67")
-combined <- ScaleData(combined, features = endoRNA)
-
-VlnPlot(combined, features = endoRNA, 
-        assay = "RNA", 
-        idents = endoCells.trt)
-
-DotPlot(combined, assay = "RNA", features = endoRNA, idents = cellList.trt)
 
 
-###############################################################################
-# Trying to apply the same type of DEG analysis to DE_ADT
-# who knows if this will work...
 
-# also going to make this more clean
 
-Idents(combined) <- "celltype.trt"
-DefaultAssay(combined) <- "integratedADT_"
+# old method pre-christmas
+# save metadata table:
+neutro$barcode <- colnames(neutro)
+neutro$UMAP_1 <- neutro@reductions$sct.umap.unint@cell.embeddings[,1]
+neutro$UMAP_2 <- neutro@reductions$sct.umap.unint@cell.embeddings[,2]
+write.csv(neutro@meta.data, file='metadata.csv', quote=F, row.names=F)
 
-DefaultAssay(combined) <- "RNA"
+# write expression counts matrix
+library(Matrix)
+counts_matrix <- GetAssayData(neutro, assay='RNA', slot='counts')
+writeMM(counts_matrix, file='counts.mtx')
 
-trtList <- c("naive", "p4", "naive", "mp4", "naive", "p24", "naive", "mp24", "p4", "mp4", "p24", "mp24")
+# write dimesnionality reduction matrix, in this example case pca matrix
+write.csv(neutro@reductions$sct_unintPC@cell.embeddings, file='pca.csv', quote=F, row.names=F)
 
-degList <- vector(mode = "list", length = length(cellList)*length(trtList)/2) # 6 comparisons for each trt and p vs. mp
-
-for (i in 1:length(x = cellList)){
-  cell <- cellList[[i]] # current celltype
-  print(cell)
-  
-  for (j in seq(1, length(trtList), 2)){
-    ident.1 <- paste(cell, trtList[[j+1]], sep = "_")
-    ident.2 <- paste(cell, trtList[[j]], sep = "_")
-    
-    if(ident.1 == "Lymphatic Fibroblasts_p24" | ident.1 == "Lymphatic Fibroblasts_mp24" | ident.1 == "Myeloid Cells_p24" | ident.2 == "Myeloid Cells_p24"){
-      next # if I knew how to catch exceptions... I would try and fix this better
-    } else {
-      
-      idx <- (i-1)*6 + (j+1)/2 # index for degList
-      
-      degList[[idx]] <- (FindMarkers(combined, ident.1 = ident.1, ident.2 = ident.2, logfc.threshold = 0))
-      
-      comparison <- paste(ident.1, ident.2, sep = " vs. ")
-      degList[[idx]]$cellType <- paste(comparison, DefaultAssay(combined))
-      
-      # add a column to tell whether the genes are up or down regulated
-      degList[[idx]]$diffexpressed <- "NO"
-      # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP"
-      degList[[idx]]$diffexpressed[degList[[idx]]$avg_log2FC > 0.6 & degList[[idx]]$p_val < 0.05] <- "UP"
-      # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
-      degList[[idx]]$diffexpressed[degList[[idx]]$avg_log2FC < -0.6 & degList[[idx]]$p_val < 0.05] <- "DOWN"
-      # adding gene symbols in a column for easy accesss
-      degList[[idx]] <- cbind(gene_symbol = rownames(degList[[idx]]), degList[[idx]])
-      # defining whether a gene is sufficiently differentially expressed or not
-      degList[[idx]]$delabel <- NA
-      degList[[idx]]$delabel[degList[[idx]]$diffexpressed != "NO"] <- degList[[idx]]$gene_symbol[degList[[idx]]$diffexpressed != "NO"]
-      
-    }
-  }
-}
-
-# saving
-saveRDS(degList, file = "degListForRNA-Data.AllComparisons.rds")
-
-# plotting
-
-graphList <- vector(mode = "list", length = length(cellList)*length(trtList)/2)
-
-for (i in 1:length(graphList)){
-  if (length(degList[[i]])==0){next}
-  
-  graphList[[i]] <- ggplot(data=degList[[i]], aes(x=avg_log2FC, y=-log10(p_val), col=diffexpressed, label=delabel)) +
-    geom_point(size = 0.4) +
-    theme_classic() +
-    geom_text_repel() +
-    scale_color_manual(values=c("blue", "black", "red")) + 
-    NoLegend() +
-    labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(p-value)')) +
-    theme(text = element_text(size=8, family = "sans"),
-          axis.title=element_text(size=10, family = "sans", face="bold"))
-  
-}
-
-# Saving plots as png:
-for (i in 1:length(x = graphList)){
-  filename <- paste(degList[[i]]$cellType[1], ".png", sep = "")
-  filename <- chartr("/", " ", filename)
-  ggsave(filename = filename, plot = graphList[[i]],
-         width = 3.5, height = 3.5)
-}
-
-degList <- do.call(rbind, degList)
-write.csv(degList, file = "2021-02-23 DEGs for Epithelial, Endo, Fibroblast, and Myeloid-Derived Cells.csv")
+# write gene names
+write.table(
+  data.frame('gene'=rownames(counts_matrix)),file='gene_names.csv',
+  quote=F,row.names=F,col.names=F
+)
