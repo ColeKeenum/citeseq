@@ -1882,25 +1882,65 @@ ggsave('neutro_orig_ident.png', width = 6, height = 5)
 
 # Find distinct phenotypic states of neutrophils:
 neutro <- FindNeighbors(neutro, reduction = 'sct_unintPC')
-neutro <- FindClusters(neutro, resolution = 0.2)
+neutro <- FindClusters(neutro, resolution = 0.1)
 DimPlot(neutro)
-ggsave('neutro_res0.2_clustering.png', width = 6, height = 5)
+ggsave('neutro_res0.1_clustering.png', width = 6, height = 5)
 
-saveRDS(neutro, 'neutro.trimmed.clusteredrds')
-# neutro <- readRDS('neutro.trimmed.clustered.rds')
+neutro <- RenameIdents(neutro,
+                       '0' = 'N0',
+                       '1' = 'N1',
+                       '2' = 'N2',
+                       '3' = 'N3')
+neutro$neutro_idents <- Idents(neutro)
+
+DimPlot(neutro, split.by = 'orig.ident')
+ggsave('neutro_split_by.png', width = 25, height = 5)
 
 # Extracting metadata including unintegrated UMAP coordinates
 # From: https://github.com/basilkhuder/Seurat-to-RNA-Velocity
 write.csv(Cells(neutro), file = "cellID_obs.csv", row.names = FALSE)
 write.csv(Embeddings(neutro, reduction = "sct.umap.unint"), file = "cell_embeddings.csv")
-write.csv(neutro@meta.data$seurat_clusters, file = "clusters.csv")
+write.csv(neutro@meta.data$neutro_idents, file = "clusters.csv")
 
+# Neutrophil gene expression scores ----
+library(readxl)
+library(ggpubr)
+xie_2020 <- read_excel("neutrophil_scores_Xie_2020.xlsx")
+# compare only features in the data
+neutro_features <- list(xie_2020$`Positive regulation of apoptotic process (GO:0043065)`, 
+                        xie_2020$`Necroptosis (GO:0070266)`, 
+                        xie_2020$`Chemotaxis (GO:0030593)`,
+                        xie_2020$`Phagocytosis (GO:0006911)`,
+                        xie_2020$`NADPH oxidase (Henderson and Chappel, 1996)`)
+neutro <- AddModuleScore(neutro, features = neutro_features, name = 'xie')
 
+FeaturePlot(neutro, features = c('xie1', 'xie2', 'xie3'))
+FeaturePlot(neutro, features = c('xie4', 'xie5'))
 
+compare <- list(c('N0', 'N1'), c('N0', 'N1'), c('N0', 'N2'), c('N0', 'N3'),
+                c('N1', 'N2'), c('N1', 'N3'), c('N2', 'N3'))
+VlnPlot(neutro, features = 'xie1', pt.size = 0) + ylim(0.05, 0.3) + NoLegend() + geom_boxplot() + ggtitle('apoptosis score') +
+  stat_compare_means(comparisons = compare, label = "p.signif")
+ggsave(filename = 'apoptosis_neutro_sig.png')
+VlnPlot(neutro, features = 'xie2', pt.size = 0) + ylim(-0.2, 0.7) + NoLegend() + geom_boxplot() + ggtitle('necroptosis score') +
+  stat_compare_means(comparisons = compare, label = "p.signif")
+ggsave(filename = 'necroptosis_neutro_sig.png')
+VlnPlot(neutro, features = 'xie3', pt.size = 0) + ylim(0, 1.3) + NoLegend() + geom_boxplot() + ggtitle('chemotaxis score') +
+  stat_compare_means(comparisons = compare, label = "p.signif")
+ggsave(filename = 'chemotaxis_neutro_sig.png')
+VlnPlot(neutro, features = 'xie4', pt.size = 0) + ylim(0, 0.85) + NoLegend() + geom_boxplot() + ggtitle('phagocytosis score') +
+  stat_compare_means(comparisons = compare, label = "p.signif")
+ggsave(filename = 'phagocytosis_neutro_sig.png')
+VlnPlot(neutro, features = 'xie5', pt.size = 0) + ylim(0, 2.4) + NoLegend() + geom_boxplot() + ggtitle('NADPH oxidase score') +
+  stat_compare_means(comparisons = compare, label = "p.signif")
+ggsave(filename = 'NADPH_oxidase_neutro_sig.png')
 
+DefaultAssay(neutro) <- 'SCT'
+FeaturePlot(neutro, features = 'Camp')
+ggsave('camp_expression.png', width = 6, height = 5)
 
-
-
+saveRDS(neutro, 'neutro_12252021.rds')
+# neutro <- readRDS('neutro_12252021.rds')
 
 # old method pre-christmas
 # save metadata table:
