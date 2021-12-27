@@ -1941,8 +1941,7 @@ ggsave(filename = 'NADPH_oxidase_neutro_sig.png')
 
 DefaultAssay(neutro) <- 'SCT'
 p <- FeaturePlot(neutro, features = 'Camp')
-p <- p + theme(legend.position = "none",
-               panel.grid = element_blank(),
+p <- p + theme(panel.grid = element_blank(),
                axis.title = element_blank(),
                axis.text = element_blank(),
                axis.ticks = element_blank())
@@ -1976,8 +1975,9 @@ markers_4h_neutro <- FindMarkers(neutro, only.pos = FALSE,
                                   min.pct = 0, logfc.threshold = 0, 
                                   max.cells.per.ident = Inf)
 write.csv(markers_4h_neutro, file = "neutro_unint_N1_vs_N3_markers.csv", row.names = TRUE)
+# markers_4h_neutro <- read.csv(file = "neutro_unint_N1_vs_N3_markers.csv", row.names = 'X')
 
-# plotting DEG results: ----
+# plotting neutro DEG results: ----
 format_DEG <- function(df){
   df$diffexpressed <- "NO"
   df$diffexpressed[df$avg_log2FC > 0.6 & df$p_val_adj < 0.05] <- "UP"
@@ -2004,20 +2004,18 @@ p <- ggplot(data=markers_4h_neutro, aes(x=avg_log2FC, y=-log10(p_val_adj), col=d
   geom_point(size = 0.4) +
   theme_classic() +
   geom_text_repel() +
-  scale_color_manual(values=c("blue", "black", "red")) + 
+  scale_color_manual(values=c("red3", "black", "orangered")) + 
   NoLegend() +
   labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(adj. p-value)')) +
   theme(text = element_text(size=8, family = "sans"),
         axis.title=element_text(size=10, family = "sans", face="bold"))
+p
 ggsave('neutro_N1_vs_N3.png', width = 5, height = 5)
 
 # Run GSEA on neutro categories: ----
 library(fgsea)
 library(msigdbr)
 msigdbr_collections()
-
-stats_list <- markers_24h_neutro$avg_log2FC
-names(stats_list) <- markers_24h_neutro$gene_symbol
 
 hallmarks <- msigdbr(species = "Mus musculus", category = "H")
 hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
@@ -2028,6 +2026,9 @@ go <- split(x = go$gene_symbol, f = go$gs_name)
 reactome <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "REACTOME")
 reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
 
+# 24h clusters
+stats_list <- markers_24h_neutro$avg_log2FC
+names(stats_list) <- markers_24h_neutro$gene_symbol
 gene_sets <- c(hallmarks, kegg, go, reactome)
 
 gsea <- fgsea(pathways = gene_sets,
@@ -2041,6 +2042,21 @@ write.csv(gsea, file = 'neutro_N0_v_N2_gsea.csv')
 gsea <- filter(gsea, padj < 0.05)
 write.csv(gsea, file = 'neutro_N0_v_N2_gsea_sig.csv')
 
+# 4h clusters
+stats_list <- markers_4h_neutro$avg_log2FC
+names(stats_list) <- markers_4h_neutro$gene_symbol
+
+gsea <- fgsea(pathways = gene_sets,
+              stats = stats_list,
+              minSize=15,
+              maxSize=Inf,
+              nproc = 12,
+              eps = 0) # no eps cutoff so we have "true" P-val
+gsea$leadingEdge <- as.character(gsea$leadingEdge)
+write.csv(gsea, file = 'neutro_N1_v_N3_gsea.csv')
+gsea <- filter(gsea, padj < 0.05)
+write.csv(gsea, file = 'neutro_N1_v_N3_gsea_sig.csv')
+
 # Due to this, plot IFNgamma responsive scores on the feature plot:
 neutro <- AddModuleScore(neutro, features = list(hallmarks$HALLMARK_INTERFERON_GAMMA_RESPONSE), name = 'ifng')
 FeaturePlot(neutro, features = 'ifng1') + theme(panel.grid = element_blank(),
@@ -2049,6 +2065,13 @@ FeaturePlot(neutro, features = 'ifng1') + theme(panel.grid = element_blank(),
                                                  axis.ticks = element_blank()) +
   ggtitle(expression('IFN'~gamma ~ 'score'))
 ggsave('neutro_ifng_score.png', width = 6, height = 5)
+
+# Plot as vln plot
+compare <- list(c('N0', 'N1'), c('N0', 'N1'), c('N0', 'N2'), c('N0', 'N3'),
+                c('N1', 'N2'), c('N1', 'N3'), c('N2', 'N3'))
+VlnPlot(neutro, features = 'ifng1', pt.size = 0) + ylim(-0.05, 1.5) + NoLegend() + geom_boxplot() + ggtitle(expression('IFN'~gamma ~ 'score')) +
+  stat_compare_means(comparisons = compare, label = "p.signif")
+ggsave(filename = 'IFNg_neutro_sig.png')
 
 # Root cell identification ------
 # Biologically known to be cells that are synthesizing granules, i.e. Camp transcripts
@@ -2060,6 +2083,8 @@ CellSelector(p)
 p <- DimPlot(subset(neutro, idents = 'mp4'))
 CellSelector(p)
 # [1] "mp4_ACAGAAAAGATGTTAG-1"
+
+
 
 
 
