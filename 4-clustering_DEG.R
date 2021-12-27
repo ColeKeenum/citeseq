@@ -1883,7 +1883,11 @@ ggsave('neutro_orig_ident.png', width = 6, height = 5)
 # Find distinct phenotypic states of neutrophils:
 neutro <- FindNeighbors(neutro, reduction = 'sct_unintPC')
 neutro <- FindClusters(neutro, resolution = 0.1)
-DimPlot(neutro)
+p <- DimPlot(neutro)
+p <- p + theme(panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
 ggsave('neutro_res0.1_clustering.png', width = 6, height = 5)
 
 neutro <- RenameIdents(neutro,
@@ -1936,11 +1940,128 @@ VlnPlot(neutro, features = 'xie5', pt.size = 0) + ylim(0, 2.4) + NoLegend() + ge
 ggsave(filename = 'NADPH_oxidase_neutro_sig.png')
 
 DefaultAssay(neutro) <- 'SCT'
-FeaturePlot(neutro, features = 'Camp')
+p <- FeaturePlot(neutro, features = 'Camp')
+p <- p + theme(legend.position = "none",
+               panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
 ggsave('camp_expression.png', width = 6, height = 5)
 
 saveRDS(neutro, 'neutro_12252021.rds')
 # neutro <- readRDS('neutro_12252021.rds')
+
+# Find markers for different neutrophil clusters: ----
+DefaultAssay(neutro) <- "SCT"
+neutro.markers <- FindAllMarkers(neutro, only.pos = FALSE, 
+                                 min.pct = 0, logfc.threshold = 0, 
+                                 max.cells.per.ident = Inf)
+write.csv(neutro.markers, file = "neutro_unint_all_markers.csv", row.names = TRUE)
+
+neutro.markers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC) -> top10
+DoHeatmap(neutro, features = top10$gene) + NoLegend()
+neutro.markers %>% group_by(cluster) %>% top_n(n = 4, wt = avg_log2FC) -> top5
+DoHeatmap(neutro, features = top5$gene) + NoLegend()
+ggsave('neutro_heatmap_markers.png', width = 5, height = 5)
+
+markers_24h_neutro <- FindMarkers(neutro, only.pos = FALSE, 
+                                     ident.1 = 'N0', ident.2 = 'N2',
+                                     min.pct = 0, logfc.threshold = 0, 
+                                     max.cells.per.ident = Inf)
+write.csv(markers_24h_neutro, file = "neutro_unint_N0_vs_N2_markers.csv", row.names = TRUE)
+# markers_24h_neutro <- read.csv(file = "neutro_unint_N0_vs_N2_markers.csv", row.names = 'X')
+
+markers_4h_neutro <- FindMarkers(neutro, only.pos = FALSE, 
+                                  ident.1 = 'N1', ident.2 = 'N3',
+                                  min.pct = 0, logfc.threshold = 0, 
+                                  max.cells.per.ident = Inf)
+write.csv(markers_4h_neutro, file = "neutro_unint_N1_vs_N3_markers.csv", row.names = TRUE)
+
+# plotting DEG results: ----
+format_DEG <- function(df){
+  df$diffexpressed <- "NO"
+  df$diffexpressed[df$avg_log2FC > 0.6 & df$p_val_adj < 0.05] <- "UP"
+  df$diffexpressed[df$avg_log2FC < -0.6 & df$p_val_adj < 0.05] <- "DOWN"
+  df <- cbind(gene_symbol = rownames(df), df)
+  df$delabel <- NA
+  df$delabel[df$diffexpressed != "NO"] <- df$gene_symbol[df$diffexpressed != "NO"]
+  return(df)
+} 
+markers_24h_neutro <- format_DEG(markers_24h_neutro)
+p <- ggplot(data=markers_24h_neutro, aes(x=avg_log2FC, y=-log10(p_val_adj), col=diffexpressed, label=delabel)) +
+  geom_point(size = 0.4) +
+  theme_classic() +
+  geom_text_repel() +
+  scale_color_manual(values=c("green4", "black", "blue")) + 
+  NoLegend() +
+  labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(adj. p-value)')) +
+  theme(text = element_text(size=8, family = "sans"),
+        axis.title=element_text(size=10, family = "sans", face="bold"))
+ggsave('neutro_N0_vs_N2.png', width = 5, height = 5)
+
+markers_4h_neutro <- format_DEG(markers_4h_neutro)
+p <- ggplot(data=markers_4h_neutro, aes(x=avg_log2FC, y=-log10(p_val_adj), col=diffexpressed, label=delabel)) +
+  geom_point(size = 0.4) +
+  theme_classic() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "black", "red")) + 
+  NoLegend() +
+  labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(adj. p-value)')) +
+  theme(text = element_text(size=8, family = "sans"),
+        axis.title=element_text(size=10, family = "sans", face="bold"))
+ggsave('neutro_N1_vs_N3.png', width = 5, height = 5)
+
+# Run GSEA on neutro categories: ----
+library(fgsea)
+library(msigdbr)
+msigdbr_collections()
+
+stats_list <- markers_24h_neutro$avg_log2FC
+names(stats_list) <- markers_24h_neutro$gene_symbol
+
+hallmarks <- msigdbr(species = "Mus musculus", category = "H")
+hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
+kegg <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "KEGG")
+kegg <- split(x = kegg$gene_symbol, f = kegg$gs_name)
+go <- msigdbr(species = "Mus musculus", category = "C5", subcategory = "BP")
+go <- split(x = go$gene_symbol, f = go$gs_name)
+reactome <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "REACTOME")
+reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
+
+gene_sets <- c(hallmarks, kegg, go, reactome)
+
+gsea <- fgsea(pathways = gene_sets,
+              stats = stats_list,
+              minSize=15,
+              maxSize=Inf,
+              nproc = 12,
+              eps = 0) # no eps cutoff so we have "true" P-val
+gsea$leadingEdge <- as.character(gsea$leadingEdge)
+write.csv(gsea, file = 'neutro_N0_v_N2_gsea.csv')
+gsea <- filter(gsea, padj < 0.05)
+write.csv(gsea, file = 'neutro_N0_v_N2_gsea_sig.csv')
+
+# Due to this, plot IFNgamma responsive scores on the feature plot:
+neutro <- AddModuleScore(neutro, features = list(hallmarks$HALLMARK_INTERFERON_GAMMA_RESPONSE), name = 'ifng')
+FeaturePlot(neutro, features = 'ifng1') + theme(panel.grid = element_blank(),
+                                                 axis.title = element_blank(),
+                                                 axis.text = element_blank(),
+                                                 axis.ticks = element_blank()) +
+  ggtitle(expression('IFN'~gamma ~ 'score'))
+ggsave('neutro_ifng_score.png', width = 6, height = 5)
+
+# Root cell identification ------
+# Biologically known to be cells that are synthesizing granules, i.e. Camp transcripts
+Idents(neutro) <- 'orig.ident'
+p <- DimPlot(subset(neutro, idents = 'p4'))
+CellSelector(p)
+# [1] "p4_CTACTATAGGAACTCG-1"
+
+p <- DimPlot(subset(neutro, idents = 'mp4'))
+CellSelector(p)
+# [1] "mp4_ACAGAAAAGATGTTAG-1"
+
+
 
 # old method pre-christmas
 # save metadata table:
