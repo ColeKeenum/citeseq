@@ -1276,7 +1276,7 @@ runGSEA <- function(cluster){
   gsea <- fgsea(pathways = gene_sets,
                 stats = cluster_genes,
                 minSize=15,
-                maxSize=500,
+                maxSize=Inf,
                 nproc = 12,
                 eps = 0) # no eps cutoff so we have "true" P-val
   gsea$cluster <- cluster
@@ -1287,16 +1287,16 @@ runGSEA <- function(cluster){
 cluster_list <- unique(result_table$cellType)
 fgsea_results <- lapply(cluster_list, runGSEA)
 
-saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_EPS_08072021.rds')
-saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_EPS_08072021.rds')
+saveRDS(cluster_list, 'cluster_list_pos_neg_PCT_EPS_12292021.rds')
+saveRDS(fgsea_results, 'fgsea_results_pos_neg_PCT_EPS_12292021.rds')
 
 fgsea_results <- do.call("rbind", fgsea_results)
 fgsea_results <- as.data.frame(fgsea_results)
 fgsea_results$leadingEdge <- as.character(fgsea_results$leadingEdge)
-write.csv(fgsea_results, 'fgsea_results_08072021_PCT_EPS.csv')
+write.csv(fgsea_results, 'fgsea_results_12292021_PCT_EPS.csv')
 
 fgsea_results <- filter(fgsea_results, padj < 0.05)
-write.csv(fgsea_results, 'fgsea_results_08072021_PCT_EPS_FILT.csv')
+write.csv(fgsea_results, 'fgsea_results_12292021_PCT_EPS_FILT.csv')
 
 # DEG / GSEA Visualization ---------------------------
 result_table <- read.csv('2021-07-29 DEGs.csv', row.names = 'X')
@@ -2084,8 +2084,16 @@ p <- DimPlot(subset(neutro, idents = 'mp4'))
 CellSelector(p)
 # [1] "mp4_ACAGAAAAGATGTTAG-1"
 
+# Plotting IFN stuff with Seurat -----
+library(ggpubr)
+# combined <- readRDS('combined_07292021_v2.rds'
+Idents(combined) <- 'celltype'
+combined@meta.data$orig.ident <- factor(x = combined@meta.data$orig.ident, 
+                                        levels = c('naive', 'p4', 'mp4', 'p24', 'mp24'))
 
-
+compare <- list(c('naive', 'p4'), c('naive', 'mp4'), c('naive', 'p24'), c('naive', 'mp24'))
+VlnPlot(combined, idents = 'NK', features = 'Ifng', split.by = 'orig.ident') + stat_compare_means(comparisons = compare, label = 'p.signif')
+ggsave('Ifng_NK.png')
 
 
 # old method pre-christmas

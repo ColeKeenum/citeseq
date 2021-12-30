@@ -419,7 +419,6 @@ netVisual_diffInteraction(cellchat, comparison = c(1,4), weight.scale = T, measu
 #netVisual_diffInteraction(cellchat, weight.scale = T, measure = "weight", top = 0.1)
 netVisual_diffInteraction(cellchat, comparison = c(4,5), weight.scale = T, measure = "weight", top = 0.2)
 
-
 # Compare the major sources and targets in 2D space
 num.link <- sapply(object.list, function(x) {rowSums(x@net$count) + colSums(x@net$count)-diag(x@net$count)})
 weight.MinMax <- c(min(num.link), max(num.link)) # control the dot size in the different datasets
@@ -429,6 +428,65 @@ for (i in 1:length(object.list)) {
 }
 ggsave('sources_and_targets.png', plot = gg[[1]] | gg[[2]] | gg[[3]] | gg[[4]] | gg[[5]],
        width = 4*5, height = 4)
+
+
+# > IFN-I Signaling ----
+par(mfrow = c(1,3), xpd=TRUE)
+# IFN-I not in naive lung
+netVisual_aggregate(object.list[[2]], signaling = 'IFN-I',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[3]], signaling = 'IFN-I',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[4]], signaling = 'IFN-I',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[5]], signaling = 'IFN-I',
+                    layout = 'circle')
+p2 <- netAnalysis_contribution(object.list[[2]], signaling = 'IFN-I')
+p3 <- netAnalysis_contribution(object.list[[3]], signaling = 'IFN-I')
+p4 <- netAnalysis_contribution(object.list[[4]], signaling = 'IFN-I')
+p5 <- netAnalysis_contribution(object.list[[5]], signaling = 'IFN-I')
+p2 | p3 | p4 | p5
+ggsave(filename = 'IFN_I_all_relative.png', width = 12, height = 4)
+
+pairLR <- extractEnrichedLR(object.list[[2]], signaling = 'IFN-I', geneLR.return = FALSE)
+LR.show <- pairLR[1,]
+
+# Plot Chord diagrams
+netVisual_individual(object.list[[2]], signaling = 'IFN-I', pairLR.use = LR.show, layout = "chord")
+netVisual_individual(object.list[[3]], signaling = 'IFN-I', pairLR.use = LR.show, layout = "chord")
+netVisual_individual(object.list[[4]], signaling = 'IFN-I', pairLR.use = LR.show, layout = "chord")
+netVisual_individual(object.list[[5]], signaling = 'IFN-I', pairLR.use = LR.show, layout = "chord")
+
+plotGeneExpression(object.list[[2]], signaling = "IFN-I")
+
+# Can also plot network centrality, but not sure if this is important:
+object.list[[2]] <- netAnalysis_computeCentrality(object.list[[2]], slot.name = "netP") 
+netAnalysis_signalingRole_network(object.list[[2]], signaling = 'IFN-I', width = 11, height = 2.5, font.size = 10)
+
+# > IFN-II Signaling ----
+# none in naive group
+# none in p4
+netVisual_aggregate(object.list[[3]], signaling = 'IFN-II',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[4]], signaling = 'IFN-II',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[5]], signaling = 'IFN-II',
+                    layout = 'circle')
+p3 <- netAnalysis_contribution(object.list[[3]], signaling = 'IFN-II')
+p4 <- netAnalysis_contribution(object.list[[4]], signaling = 'IFN-II')
+p5 <- netAnalysis_contribution(object.list[[5]], signaling = 'IFN-II')
+p3 | p4 | p5
+ggsave(filename = 'IFN_II_all_relative.png', width = 12, height = 4)
+
+pairLR <- extractEnrichedLR(object.list[[3]], signaling = 'IFN-II', geneLR.return = FALSE)
+LR.show <- pairLR[1,]
+
+# Plot Chord diagrams
+netVisual_individual(object.list[[3]], signaling = 'IFN-II', pairLR.use = LR.show, layout = "circle", remove.isolate = T)
+netVisual_individual(object.list[[4]], signaling = 'IFN-II', pairLR.use = LR.show, layout = "circle", remove.isolate = T)
+netVisual_individual(object.list[[5]], signaling = 'IFN-II', pairLR.use = LR.show, layout = "circle", remove.isolate = T)
+
+plotGeneExpression(object.list[[3]], signaling = "IFN-II")
 
 
 
