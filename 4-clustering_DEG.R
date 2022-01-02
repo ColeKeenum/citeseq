@@ -344,7 +344,7 @@ combined <- RenameIdents(object = combined,
                          '2' = "N",
                          '3' = "AM",
                          '4' = "gCap",
-                         '5' = "Immature B",
+                         '5' = "Immature B", # renamed later in code
                          
                          '7' = "AT 2",
                          
@@ -362,7 +362,7 @@ combined <- RenameIdents(object = combined,
                          '22' = "Ebf1 Fib",
 
                          '24' = "Lipofib",
-                         '25' = "Mature B",
+                         '25' = "Mature B", # renamed later in code
 
                          
                          '28' = "Vein",
@@ -374,7 +374,7 @@ combined <- RenameIdents(object = combined,
                          '34' = "AM",
                          '35' = "N",
                          '36' = "Adv Fib",
-                         '37' = "Immature B",
+                         '37' = "Immature B", # renamed later in code
 
 
                          '40' = "N",
@@ -1237,26 +1237,67 @@ degList <- do.call(rbind, degList)
 write.csv(degList, file = "2021-07-29 DEGs.csv")
 saveRDS(combined, 'combined_07292021_v2.rds')
 
+# Rename B cells: ------
+# combined <- readRDS('combined_07292021_v2.rds')
+Idents(combined) <- 'celltype'
+combined <- RenameIdents(combined, 'Immature B' = 'IgD Hi B',
+                         'Mature B' = 'IgD Lo B')
+genes <- FindMarkers(combined, ident.1 = 'IgD Hi B', ident.2 = 'IgD Lo B',
+                     logfc.threshold = 0, max.cells.per.ident = Inf, only.pos = F,
+                     min.pct = 0)
+write.csv(genes, 'bcells_markers.csv')
+
+format_DEG <- function(df){
+  df$diffexpressed <- "NO"
+  df$diffexpressed[df$avg_log2FC > 0.6 & df$p_val_adj < 0.05] <- "UP"
+  df$diffexpressed[df$avg_log2FC < -0.6 & df$p_val_adj < 0.05] <- "DOWN"
+  df <- cbind(gene_symbol = rownames(df), df)
+  df$delabel <- NA
+  df$delabel[df$diffexpressed != "NO"] <- df$gene_symbol[df$diffexpressed != "NO"]
+  return(df)
+} 
+df <- format_DEG(genes)
+
+p <- ggplot(data=df, aes(x=avg_log2FC, y=-log10(p_val_adj), col=diffexpressed, label=delabel)) +
+  geom_point(size = 0.4) +
+  theme_classic() +
+  geom_text_repel() +
+  scale_color_manual(values=c("blue", "black", "red")) + 
+  NoLegend() +
+  labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(adj. p-value)')) +
+  theme(text = element_text(size=8, family = "sans"),
+        axis.title=element_text(size=10, family = "sans", face="bold"))
+ggsave('B_subtypes_DEGs.png', width = 5, height = 5)
+
+DimPlot(combined, reduction = 'wnn.umap', label = T) + NoLegend()
+
+saveRDS(combined, 'combined_01012022.rds')
+
 # GSEA  ---------------------------
 library(fgsea)
-library(msigdbr)
 # Edited by MCK based on analysis of Hurskainen et all. 2021 Nat. Comm.
 # Using version 7.4 from the MSigDB
 
 result_table <- read.csv('2021-07-29 DEGs.csv', row.names = 'X')
 
-msigdbr_collections()
+gene_set_maker <- function(){
+  library(msigdbr)
+  
+  # msigdbr_collections()
+  
+  hallmarks <- msigdbr(species = "Mus musculus", category = "H")
+  hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
+  kegg <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "KEGG")
+  kegg <- split(x = kegg$gene_symbol, f = kegg$gs_name)
+  go <- msigdbr(species = "Mus musculus", category = "C5", subcategory = "BP")
+  go <- split(x = go$gene_symbol, f = go$gs_name)
+  reactome <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "REACTOME")
+  reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
+  
+  gene_sets <- c(hallmarks, kegg, go, reactome)
+  return(gene_sets)
+}
 
-hallmarks <- msigdbr(species = "Mus musculus", category = "H")
-hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
-kegg <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "KEGG")
-kegg <- split(x = kegg$gene_symbol, f = kegg$gs_name)
-go <- msigdbr(species = "Mus musculus", category = "C5", subcategory = "BP")
-go <- split(x = go$gene_symbol, f = go$gs_name)
-reactome <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "REACTOME")
-reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
-
-gene_sets <- c(hallmarks, kegg, go, reactome)
 
 # Define a function to run GSEA for a single cluster
 runGSEA <- function(cluster){
@@ -1351,7 +1392,7 @@ saveRDS(plot_list, 'GSEA_plot_list_08072021.rds')
 
 # Define function to write a frequency table with top 10 +/- GSEA categories
 top_GSEA <- function(df, n = 10){
-  # Pathways that I do not want to be represented in my pseudo-heuristic method
+  # Pathways that I do not want to be represented
   uninteresting_paths <- c('KEGG_PARKINSONS_DISEASE',
                            'KEGG_HUNTINGTONS_DISEASE',
                            'KEGG_ALZHEIMERS_DISEASE',
@@ -1635,8 +1676,8 @@ ggsave('CD200_ADT_v2.png', width = 10, height = 5)
 
 # Figure 1 Marker ADTs:
 DefaultAssay(combined) <- 'ADT'
-adt.to.plot <- c('CD45','ESAM', 'CD326', 'Ly-6G', 'CD19',  
-                 'CD11b', 'CD170', 'TCRB', 'CD4', 'CD8b')
+adt.to.plot <- c('CD45','CD326', 'CDLy6C', 'Ly-6G', 'CD19', 'IgD', 
+                 'CD11b', 'CD170', 'CD4', 'CD8b')
 gg <- list()
 for (i in 1:length(adt.to.plot)){
   adt <- paste(adt.to.plot[[i]], '-TotalA', sep = '')
@@ -1647,7 +1688,7 @@ for (i in 1:length(adt.to.plot)){
                     axis.text = element_blank(),
                     axis.ticks = element_blank()) + ggtitle(adt.to.plot[[i]])
 }
-ggsave('Fig1_ADT_v2.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 5),
+ggsave('Fig1_ADT_v3.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 5),
        height = 2*3, width = 5*3)
 
 # Plotting a more clean UMAP:
@@ -1939,6 +1980,7 @@ VlnPlot(neutro, features = 'xie5', pt.size = 0) + ylim(0, 2.4) + NoLegend() + ge
   stat_compare_means(comparisons = compare, label = "p.signif")
 ggsave(filename = 'NADPH_oxidase_neutro_sig.png')
 
+# Plot specific early neutrophil genes:
 DefaultAssay(neutro) <- 'SCT'
 p <- FeaturePlot(neutro, features = 'Camp')
 p <- p + theme(panel.grid = element_blank(),
@@ -1946,6 +1988,27 @@ p <- p + theme(panel.grid = element_blank(),
                axis.text = element_blank(),
                axis.ticks = element_blank())
 ggsave('camp_expression.png', width = 6, height = 5)
+
+p <- FeaturePlot(neutro, features = 'Mmp8')
+p <- p + theme(panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave('Mmp8_expression.png', width = 6, height = 5)
+
+p <- FeaturePlot(neutro, features = 'Ngp')
+p <- p + theme(panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave('Ngp_expression.png', width = 6, height = 5)
+
+p <- FeaturePlot(neutro, features = 'Ltf')
+p <- p + theme(panel.grid = element_blank(),
+               axis.title = element_blank(),
+               axis.text = element_blank(),
+               axis.ticks = element_blank())
+ggsave('Ltf_expression.png', width = 6, height = 5)
 
 saveRDS(neutro, 'neutro_12252021.rds')
 # neutro <- readRDS('neutro_12252021.rds')
@@ -2086,7 +2149,7 @@ CellSelector(p)
 
 # Plotting IFN stuff with Seurat -----
 library(ggpubr)
-# combined <- readRDS('combined_07292021_v2.rds'
+# combined <- readRDS('combined_07292021_v2.rds')
 Idents(combined) <- 'celltype'
 combined@meta.data$orig.ident <- factor(x = combined@meta.data$orig.ident, 
                                         levels = c('naive', 'p4', 'mp4', 'p24', 'mp24'))
@@ -2094,6 +2157,203 @@ combined@meta.data$orig.ident <- factor(x = combined@meta.data$orig.ident,
 compare <- list(c('naive', 'p4'), c('naive', 'mp4'), c('naive', 'p24'), c('naive', 'mp24'))
 VlnPlot(combined, idents = 'NK', features = 'Ifng', split.by = 'orig.ident') + stat_compare_means(comparisons = compare, label = 'p.signif')
 ggsave('Ifng_NK.png')
+
+# GSEA Interferon Results with all celltypes ----
+gsea <- read.csv('fgsea_results_12292021_PCT_EPS_FILT.csv')
+gsea$trt <- str_split_fixed(gsea$cluster, '_', 2)[,2]
+
+paths <- c('HALLMARK_INTERFERON_GAMMA_RESPONSE',
+           'GOBP_RESPONSE_TO_INTERFERON_GAMMA',
+           'HALLMARK_INTERFERON_ALPHA_RESPONSE',
+           'REACTOME_INTERFERON_SIGNALING',
+           'REACTOME_INTERFERON_ALPHA_BETA_SIGNALING')
+
+trts <- c('p24', 'mp24')
+results <- gsea %>% filter(pathway %in% paths) %>% filter(trt %in% trts)
+
+ggplot(results, aes(x = pathway, y = cluster, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_interferons_24.png', height = 12)
+
+paths <- c('HALLMARK_INTERFERON_GAMMA_RESPONSE',
+           'GOBP_RESPONSE_TO_INTERFERON_GAMMA',
+           'HALLMARK_INTERFERON_ALPHA_RESPONSE',
+           'REACTOME_INTERFERON_SIGNALING',
+           'REACTOME_INTERFERON_ALPHA_BETA_SIGNALING')
+
+trts <- c('p4', 'mp4')
+results <- gsea %>% filter(pathway %in% paths) %>% filter(trt %in% trts)
+
+ggplot(results, aes(x = pathway, y = cluster, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_interferons_4.png', height = 12)
+
+# Bar plots:
+gsea <- read.csv('fgsea_results_12292021_PCT_EPS.csv')
+gsea$trt <- str_split_fixed(gsea$cluster, '_', 2)[,2]
+trts <- c('p24', 'mp24')
+results <- gsea %>% filter(pathway %in% c('HALLMARK_INTERFERON_GAMMA_RESPONSE')) %>% filter(trt %in% trts)
+ggplot(results, aes(x = cluster, y = -log10(padj))) + 
+  geom_bar(stat = 'identity', fill = 'red3') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank())
+ggsave('hallmark_Ifng_response_24h.png', height = 12)
+
+results <- gsea %>% filter(pathway %in% c('HALLMARK_INTERFERON_ALPHA_RESPONSE', 'HALLMARK_INTERFERON_GAMMA_RESPONSE')) %>% filter(trt %in% trts)
+results$pathway <- str_replace(results$pathway, 'HALLMARK_INTERFERON', 'IFN')
+ggplot(results, aes(fill = pathway, x = cluster, y = -log10(padj))) + 
+  geom_bar(position = 'dodge', stat = 'identity') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank()) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+ggsave('hallmark_dual_IFN_response_24h.png', height = 12, width = 5)
+
+results <- gsea %>% filter(pathway %in% c('HALLMARK_INTERFERON_ALPHA_RESPONSE')) %>% filter(trt %in% trts)
+ggplot(results, aes(x = cluster, y = -log10(padj))) + 
+  geom_bar(stat = 'identity', fill = 'red4') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank())
+ggsave('hallmark_Ifna_response_24h.png', height = 12)
+
+trts <- c('p4', 'mp4')
+results <- gsea %>% filter(pathway %in% c('HALLMARK_INTERFERON_GAMMA_RESPONSE')) %>% filter(trt %in% trts)
+ggplot(results, aes(x = cluster, y = -log10(padj))) + 
+  geom_bar(stat = 'identity', fill = 'red3') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank())
+
+# Heatmap with interferon-related genes: ----
+library(ComplexHeatmap)
+
+# Get a list of IFN-related genes: use both hallmarks
+gene_sets <- gene_set_maker()
+genes <- Reduce(union, gene_sets[paths])
+
+degs <- read.csv('2021-07-29 DEGs.csv')
+degs$trt <- str_split_fixed(degs$cellType, '_', 2)[,2]
+
+# note: hallmark IFN gene sets are fairly similar
+genes <- intersect(genes, degs$gene_symbol)
+quantile(degs$avg_log2FC)
+
+degs <- filter(degs, trt %in% c('mp24', 'p24'))
+unique(intersect(degs$gene_symbol, genes))
+degs <- filter(degs, gene_symbol %in% genes)
+
+degs <- degs[, c("gene_symbol", "avg_log2FC", 'cellType')]
+degs <- pivot_wider(degs, 
+                    names_from = cellType, 
+                    values_from = avg_log2FC,
+                    values_fill = 0) %>% as.data.frame()
+rownames(degs) <- degs$gene_symbol
+degs <- select(degs, -c('gene_symbol'))
+
+col_fun = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+
+# Massive heatmap for data exploration:
+Heatmap(degs, cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+
+# Get top 25 genes by average expression from these pathways:
+top25 <- sort(rowMeans(degs), decreasing = TRUE)[1:25]
+degs <- degs[names(top25), ]
+
+col_fun = circlize::colorRamp2(c(-4, 0, 7), c("blue3", "white", "red3"))
+Heatmap(degs, name = 'log2FC',
+        cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+# save as 5.5 x 11 in pdf
+
+# GSEA Ribosome Results on all celltypes -----
+gsea <- read.csv('fgsea_results_12292021_PCT_EPS_FILT.csv')
+gsea$trt <- str_split_fixed(gsea$cluster, '_', 2)[,2]
+
+paths <- c('REACTOME_EUKARYOTIC_TRANSLATION_ELONGATION',
+           'REACTOME_SRP_DEPENDENT_COTRANSLATIONAL_PROTEIN_TARGETING_TO_MEMBRANE',
+           'REACTOME_EUKARYOTIC_TRANSLATION_INITIATION',
+           'REACTOME_TRANSLATION',
+           'GOBP_COTRANSLATIONAL_PROTEIN_TARGETING_TO_MEMBRANE',
+           'GOBP_ESTABLISHMENT_OF_PROTEIN_LOCALIZATION_TO_ENDOPLASMIC_RETICULUM',
+           'GOBP_PROTEIN_LOCALIZATION_TO_ENDOPLASMIC_RETICULUM',
+           'GOBP_TRANSLATIONAL_INITIATION',
+           'KEGG_RIBOSOME')
+
+trts <- c('p24', 'mp24')
+results <- gsea %>% filter(pathway %in% paths) %>% filter(trt %in% trts)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_ribosome_24.png', width = 16)
+
+trts <- c('p4', 'mp4')
+results <- gsea %>% filter(pathway %in% paths) %>% filter(trt %in% trts)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_ribosome_4.png', width = 16.5)
+
+# Export markers for all celltypes: --------
+# combined <- readRDS('combined_07292021_v2.rds')
+Idents(combined) <- 'celltype'
+DefaultAssay(combined) <- 'SCT'
+biomarkers <- FindAllMarkers(combined, logfc.threshold = 0, only.pos = FALSE,
+                             max.cells.per.ident = Inf)
+top10 <- biomarkers %>% group_by(cluster) %>% top_n(n = 10, wt = avg_log2FC)
+write.csv(biomarkers, file = "gene_biomarkers_all.csv", row.names = FALSE)
+write.csv(top10, file = "gene_biomarkers_top10.csv", row.names = FALSE)
+
+# Make feature plots for the most important marker genes: -----
+DefaultAssay(combined) <- 'SCT'
+rna.to.plot <- c('Ly6c2', 'Gngt2', 'Gpihbp1', 'Kdr', 'Vwf', 'Sftpc', 
+                 'Hopx', 'Tagln', 'Postn', 'Inmt', 'Gzma', 'Rora')
+gg <- list()
+for (i in 1:length(rna.to.plot)){
+  gg[[i]] <- FeaturePlot(combined, features = rna.to.plot[[i]], reduction = 'wnn.umap') + 
+    theme(axis.title = element_blank(),
+          axis.text = element_blank(),
+          axis.ticks = element_blank()) + ggtitle(rna.to.plot[[i]])
+}
+ggsave('Fig1_RNA.png', plot = cowplot::plot_grid(plotlist = gg, ncol = 6),
+       height = 2*3, width = 6*3)
+
+# Plot all ADTs
+DefaultAssay(combined) <- 'ADT'
+protein.to.plot <- rownames(combined@assays$ADT)
+for (i in 1:length(protein.to.plot)){
+  p <- FeaturePlot(combined, features = protein.to.plot[[i]], cols = c("lightgrey","darkgreen"),
+                   min.cutoff = 0, max.cutoff = 'q99', reduction = 'wnn.umap')
+  ggsave(gsub('/','',paste0(protein.to.plot[[i]],'.png', sep = '')), 
+         plot = p)
+}
+
+# Calculate all DEGs for orig.ident comparion: ------
+# combined <- readRDS('combined_07292021_v2.rds')
+Idents(combined) <- 'orig.ident'
+DefaultAssay(combined) <- 'SCT'
+degs.orig.ident <- FindAllMarkers(combined, logfc.threshold = 0, only.pos = FALSE,
+                                  max.cells.per.ident = Inf)
+write.csv(degs.orig.ident, file = "degs_orig_ident.csv", row.names = FALSE)
+# NEED TO FIX, MAKE COMPARISON TO NAIVE ONLY!
+
+
+
 
 
 # old method pre-christmas

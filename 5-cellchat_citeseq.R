@@ -20,7 +20,7 @@ freq_table <- read.csv('t2_condensed.csv', row.names = 'X')
 Idents(combined) <- "celltype.trt"
 
 # DEGs will be calculated relative to naive
-DefaultAssay(combined) <- "SCT" # you definitely dont want to do this on integratedSCT_
+DefaultAssay(combined) <- "SCT" # dont want to do this on integratedSCT_
 cellList <- unique(combined$celltype)
 cellList <- levels(cellList)
 
