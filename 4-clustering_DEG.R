@@ -2309,6 +2309,93 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
 ggsave('GSEA_ribosome_4.png', width = 16.5)
 
+# Bar plots:
+# Pull all GSEA including non significant
+gsea <- read.csv('fgsea_results_12292021_PCT_EPS.csv')
+gsea$trt <- str_split_fixed(gsea$cluster, '_', 2)[,2]
+trts <- c('p4', 'mp4')
+
+results <- gsea %>% filter(pathway %in% c('KEGG_RIBOSOME', 'REACTOME_TRANSLATION', 'GOBP_TRANSLATIONAL_INITIATION')) %>% filter(trt %in% trts)
+ggplot(results, aes(fill = pathway, x = cluster, y = -log10(padj))) + 
+  geom_bar(position = 'dodge', stat = 'identity') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank()) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+ggsave('ribosome_translation_4hr_width5.png', height = 12, width = 5)
+ggsave('ribosome_translation_4hr_width6.png', height = 12, width = 6)
+ggsave('ribosome_translation_4hr_width7.png', height = 12, width = 7)
+
+trts <- c('p24', 'mp24')
+results <- gsea %>% filter(pathway %in% c('KEGG_RIBOSOME', 'REACTOME_TRANSLATION', 'GOBP_TRANSLATIONAL_INITIATION')) %>% filter(trt %in% trts)
+ggplot(results, aes(fill = pathway, x = cluster, y = -log10(padj))) + 
+  geom_bar(position = 'dodge', stat = 'identity') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank()) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+ggsave('ribosome_translation_24hr_width5.png', height = 12, width = 5)
+ggsave('ribosome_translation_24hr_width6.png', height = 12, width = 6)
+ggsave('ribosome_translation_24hr_width7.png', height = 12, width = 7)
+
+# Heatmap with ribosome-realted genes: ----
+library(ComplexHeatmap)
+library(stringr)
+
+# Get a list of ribosome-related genes:
+gene_sets <- gene_set_maker()
+genes <- Reduce(union, gene_sets[paths])
+
+degs <- read.csv('2021-07-29 DEGs.csv')
+degs$trt <- str_split_fixed(degs$cellType, '_', 2)[,2]
+
+genes <- intersect(genes, degs$gene_symbol)
+quantile(degs$avg_log2FC)
+
+degs <- filter(degs, trt %in% c('p4', 'mp4'))
+unique(intersect(degs$gene_symbol, genes))
+degs <- filter(degs, gene_symbol %in% genes)
+
+degs <- degs[, c("gene_symbol", "avg_log2FC", 'cellType')]
+degs <- tidyr::pivot_wider(degs, 
+                    names_from = cellType, 
+                    values_from = avg_log2FC,
+                    values_fill = 0) %>% as.data.frame()
+rownames(degs) <- degs$gene_symbol
+degs <- select(degs, -c('gene_symbol'))
+
+col_fun = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+
+# Massive heatmap for data exploration:
+Heatmap(degs, cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+
+# Get top (bottom) 25 genes by average expression from these pathways:
+top50 <- sort(rowMeans(degs), decreasing = FALSE)[1:50]
+degs50 <- degs[names(top50), ]
+
+col_fun = circlize::colorRamp2(c(-1.5, 0, 1), c("blue3", "white", "red3"))
+Heatmap(degs50, name = 'log2FC',
+        cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+# save as 5.5 x 11 in pdf
+
+# Plot ribosome-related genes on KEGG pathway -----
+library(AnnotationDbi)
+library(org.Mm.eg.db)
+library(pathview)
+
+genes <- rowMeans(degs)
+ids <- mapIds(org.Mm.eg.db, keys=names(genes), column="ENTREZID", keytype="SYMBOL", 
+              multiVals="first")
+names(genes) <- ids
+
+pv.out <- pathview(gene.data = genes, pathway.id = "03010",
+                   species = "mmu", limit = list(gene=1, cpd=1),
+                   low = list(gene = 'blue1', cpd = 'green'),
+                   out.suffix = "ribosome_test")
+
+
 # Export markers for all celltypes: --------
 # combined <- readRDS('combined_07292021_v2.rds')
 Idents(combined) <- 'celltype'
@@ -2350,13 +2437,28 @@ DefaultAssay(combined) <- 'SCT'
 degs.orig.ident <- FindAllMarkers(combined, logfc.threshold = 0, only.pos = FALSE,
                                   max.cells.per.ident = Inf)
 write.csv(degs.orig.ident, file = "degs_orig_ident.csv", row.names = FALSE)
-# NEED TO FIX, MAKE COMPARISON TO NAIVE ONLY!
+
+# make comparison to naive
+degList <- vector(mode = 'list', length = 4)
+trtList <- c('p4', 'mp4', 'p24', 'mp24')
+for (i in 1:length(degList)){
+  print(trtList[[i]])
+  degList[[i]] <- FindMarkers(combined, ident.1 = trtList[[i]], ident.2 = 'naive',
+                              logfc.threshold = 0, only.pos = FALSE,
+                              max.cells.per.ident = Inf)
+  degList[[i]]$trt <- trtList[[i]]
+}
+write.csv(do.call(rbind, degList), 'overall_DEGs_vs_naive.csv')
 
 
 
 
 
-# old method pre-christmas
+
+
+
+# Way to get colors on UMAP with scanpy:
+# old method pre-christmas 2021
 # save metadata table:
 neutro$barcode <- colnames(neutro)
 neutro$UMAP_1 <- neutro@reductions$sct.umap.unint@cell.embeddings[,1]
@@ -2376,3 +2478,6 @@ write.table(
   data.frame('gene'=rownames(counts_matrix)),file='gene_names.csv',
   quote=F,row.names=F,col.names=F
 )
+
+
+
