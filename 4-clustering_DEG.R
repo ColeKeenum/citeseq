@@ -2392,9 +2392,7 @@ names(genes) <- ids
 
 pv.out <- pathview(gene.data = genes, pathway.id = "03010",
                    species = "mmu", limit = list(gene=1, cpd=1),
-                   low = list(gene = 'blue1', cpd = 'green'),
-                   out.suffix = "ribosome_test")
-
+                   out.suffix = "ribosome_green")
 
 # Export markers for all celltypes: --------
 # combined <- readRDS('combined_07292021_v2.rds')
@@ -2450,12 +2448,18 @@ for (i in 1:length(degList)){
 }
 write.csv(do.call(rbind, degList), 'overall_DEGs_vs_naive.csv')
 
-
-
-
-
-
-
+# Export total nCountRNA values: -----
+library(ggpubr)
+# combined <- readRDS('combined_07292021_v2.rds')
+combined@meta.data$orig.ident <- factor(x = combined@meta.data$orig.ident, 
+                                        levels = c('naive', 'p4', 'mp4', 'p24', 'mp24'))
+Idents(combined) <- 'orig.ident'
+compare <- list(c('naive', 'p4'), c('naive', 'mp4'), c('naive', 'p24'), c('naive', 'mp24'))
+p <- VlnPlot(combined, features = 'nCount_RNA', split.by = 'orig.ident', pt.size = 0, y.max = 60000)  + 
+  stat_compare_means(comparisons = compare, label = 'p.signif') +
+  stat_summary(fun.y = median, geom='point', size = 8, colour = "black", shape = 95)
+p
+ggsave(plot = p, filename = 'nCount_RNA_global.png', width = 5, height = 5)
 
 # Way to get colors on UMAP with scanpy:
 # old method pre-christmas 2021
