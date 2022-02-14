@@ -2483,5 +2483,112 @@ write.table(
   quote=F,row.names=F,col.names=F
 )
 
+# Compute GSEA for MP vs. P categories: -----------
+library(fgsea)
+
+result_table <- read.csv('2021-08-21 mp vs. p DEGs.csv', row.names = 'X')
+
+gene_set_maker <- function(){
+  library(msigdbr)
+  
+  # msigdbr_collections()
+  
+  hallmarks <- msigdbr(species = "Mus musculus", category = "H")
+  hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
+  kegg <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "KEGG")
+  kegg <- split(x = kegg$gene_symbol, f = kegg$gs_name)
+  go <- msigdbr(species = "Mus musculus", category = "C5", subcategory = "BP")
+  go <- split(x = go$gene_symbol, f = go$gs_name)
+  reactome <- msigdbr(species = "Mus musculus", category = "C2", subcategory = "REACTOME")
+  reactome <- split(x = reactome$gene_symbol, f = reactome$gs_name)
+  
+  gene_sets <- c(hallmarks, kegg, go, reactome)
+  return(gene_sets)
+}
+
+# Define a function to run GSEA for a single cluster
+runGSEA <- function(cluster){
+  print(cluster)
+  results <- filter(result_table, cellType == cluster)
+  
+  # results <- filter(results, p_val <= 0.05 &
+  #                     abs(avg_log2FC) >= log2(1.5)) # +/-1.5 FC cutoff
+  results <- filter(results, pct.1 >= 0.05)
+  
+  results <- arrange(results, desc(avg_log2FC))
+  print(dim(results)[1])
+  
+  cluster_genes <- results$avg_log2FC
+  names(cluster_genes) <- results$gene
+  
+  gsea <- fgsea(pathways = gene_sets,
+                stats = cluster_genes,
+                minSize=15,
+                maxSize=Inf,
+                nproc = 12,
+                eps = 0) # no eps cutoff so we have "true" P-val
+  gsea$cluster <- cluster
+  
+  return(gsea)
+}
+
+gene_sets <- gene_set_maker()
+
+cluster_list <- unique(result_table$cellType)
+fgsea_results <- lapply(cluster_list, runGSEA)
+
+saveRDS(cluster_list, 'cluster_list_pos_neg_mp_vs_p_02132022.rds')
+saveRDS(fgsea_results, 'fgsea_results_pos_neg_mp_vs_p_02132022.rds')
+
+fgsea_results <- do.call("rbind", fgsea_results)
+fgsea_results <- as.data.frame(fgsea_results)
+fgsea_results$leadingEdge <- as.character(fgsea_results$leadingEdge)
+write.csv(fgsea_results, 'fgsea_results_mp_vs_p_02132022.csv')
+
+fgsea_results <- filter(fgsea_results, padj < 0.05)
+write.csv(fgsea_results, 'fgsea_results_mp_vs_p_FILT_02132022.csv')
+
+# Making table of GSEA frequencies:
+
+all_filt_res <- read.csv('fgsea_results_mp_vs_p_FILT_02132022.csv')
+term_frequencies <- table(all_filt_res$pathway)
+write.csv(term_frequencies, 'fgsea_results_mp_vs_p_FILT_all_numb_02132022.csv')
+
+df_total <- top_GSEA(all_filt_res, n = 30)
+write.csv(df_total, 'fgsea_results_30_top_pos_neg_mp_vs_p_02132022.csv')
+
+# Visualizing most represented GSEA results across all celltypes: -------
+library(stringr)
+gsea <- read.csv('fgsea_results_mp_vs_p_FILT_02132022.csv')
+
+paths <- c('GOBP_NEUTROPHIL_MIGRATION',
+           'GOBP_GRANULOCYTE_CHEMOTAXIS',
+           'GOBP_NEUTROPHIL_CHEMOTAXIS',
+           'GOBP_GRANULOCYTE_MIGRATION',
+           'GOBP_LEUKOCYTE_CHEMOTAXIS')
+
+results <- gsea %>% filter(pathway %in% paths)
+
+ggplot(results, aes(x = pathway, y = cluster, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_mp_vs_p_neutrophil_chemotaxis.png', height = 12)
+
+# Bar plots:
+gsea <- read.csv('fgsea_results_mp_vs_p_02132022.csv')
+results <- gsea %>% filter(pathway %in% c('GOBP_NEUTROPHIL_CHEMOTAXIS', 'GOBP_NEUTROPHIL_MIGRATION'))
+ggplot(results, aes(fill = pathway, x = cluster, y = -log10(padj))) + 
+  geom_bar(position = 'dodge', stat = 'identity') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  coord_flip() + theme(axis.title.y = element_blank()) + 
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        panel.background = element_blank(), axis.line = element_line(colour = "black"))
+ggsave('gobp_neutrophil_chemotaxis_mp_vs_p.png', height = 12)
+
+
+
 
 
