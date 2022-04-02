@@ -489,6 +489,97 @@ netVisual_individual(object.list[[5]], signaling = 'IFN-II', pairLR.use = LR.sho
 plotGeneExpression(object.list[[3]], signaling = "IFN-II")
 
 
+# MP vs P signaling -----
+# TNFa
+netVisual_aggregate(object.list[[1]], signaling = 'TNF',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[2]], signaling = 'TNF',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[3]], signaling = 'TNF',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[4]], signaling = 'TNF',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[5]], signaling = 'TNF',
+                    layout = 'circle')
+
+plotGeneExpression(object.list[[1]], signaling = 'TNF')
+plotGeneExpression(object.list[[4]], signaling = 'TNF')
+plotGeneExpression(object.list[[5]], signaling = 'TNF')
+
+# CXCL
+netVisual_aggregate(object.list[[1]], signaling = 'CXCL',
+                    layout = 'chord')
+netVisual_aggregate(object.list[[4]], signaling = 'CXCL',
+                    layout = 'chord')
+netVisual_aggregate(object.list[[5]], signaling = 'CXCL',
+                    layout = 'chord')
+
+netVisual_aggregate(object.list[[1]], signaling = 'CXCL',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[4]], signaling = 'CXCL',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[5]], signaling = 'CXCL',
+                    layout = 'circle')
+
+# Will compare 4,5 for p vs mp 24 h
+netVisual_diffInteraction(cellchat, comparison = c(4,5), weight.scale = T, measure = "weight", top = 0.2)
+
+pairLR <- extractEnrichedLR(object.list[[4]], signaling = 'CXCL', geneLR.return = FALSE)
+LR.show <- pairLR[1,]
+
+pairLR <- extractEnrichedLR(object.list[[5]], signaling = 'CXCL', geneLR.return = FALSE)
+LR.show <- pairLR[1,]
+
+# CXCL1 is the most significant signaling pathway in the 4 and 5 groups: 
+# naive
+netVisual_individual(object.list[[1]], signaling = 'CXCL', pairLR.use = 'CXCL1_CXCR2', layout = "chord")
+# p24
+netVisual_individual(object.list[[4]], signaling = 'CXCL', pairLR.use = 'CXCL1_CXCR2', layout = "chord")
+#mp24
+netVisual_individual(object.list[[5]], signaling = 'CXCL', pairLR.use = 'CXCL1_CXCR2', layout = "chord")
+
+# in mp24 only
+netVisual_individual(object.list[[5]], signaling = 'CXCL', pairLR.use = 'CXCL4_CXCR3', layout = "chord")
+
+# MP vs P IL-1 signaling -----
+netVisual_aggregate(object.list[[1]], signaling = 'IL1',
+                    layout = 'chord')
+netVisual_aggregate(object.list[[4]], signaling = 'IL1',
+                    layout = 'chord')
+netVisual_aggregate(object.list[[5]], signaling = 'IL1',
+                    layout = 'chord')
+
+# Upregulated in DEGs for mp vs p: Il1b, Il1rn, Il1r2
+netVisual_aggregate(object.list[[1]], signaling = 'IL1',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[4]], signaling = 'IL1',
+                    layout = 'circle')
+netVisual_aggregate(object.list[[5]], signaling = 'IL1',
+                    layout = 'circle')
+p3 <- netAnalysis_contribution(object.list[[3]], signaling = 'IL1')
+p4 <- netAnalysis_contribution(object.list[[4]], signaling = 'IL1')
+p5 <- netAnalysis_contribution(object.list[[5]], signaling = 'IL1')
+p3 | p4 | p5
+ggsave(filename = 'il1_all_relative.png', width = 12, height = 4)
+
+# IL-1b and IL-1a signaling to IL1r seems most obvious
+pairLR <- extractEnrichedLR(object.list[[1]], signaling = 'IL1', geneLR.return = FALSE)
+
+netVisual_individual(object.list[[1]], signaling = 'IL1', pairLR.use = 'IL1A_IL1R2', layout = "chord")
+netVisual_individual(object.list[[4]], signaling = 'IL1', pairLR.use = 'IL1A_IL1R2', layout = "chord")
+netVisual_individual(object.list[[5]], signaling = 'IL1', pairLR.use = 'IL1A_IL1R2', layout = "chord")
+
+netVisual_individual(object.list[[1]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "chord")
+netVisual_individual(object.list[[4]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "chord")
+netVisual_individual(object.list[[5]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "chord")
+
+netVisual_individual(object.list[[1]], signaling = 'IL1', pairLR.use = 'IL1A_IL1R2', layout = "circle")
+netVisual_individual(object.list[[4]], signaling = 'IL1', pairLR.use = 'IL1A_IL1R2', layout = "circle")
+netVisual_individual(object.list[[5]], signaling = 'IL1', pairLR.use = 'IL1A_IL1R2', layout = "circle")
+
+netVisual_individual(object.list[[1]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "circle")
+netVisual_individual(object.list[[4]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "circle")
+netVisual_individual(object.list[[5]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "circle")
 
 
 

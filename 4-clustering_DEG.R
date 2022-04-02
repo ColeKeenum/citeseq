@@ -2557,10 +2557,11 @@ write.csv(term_frequencies, 'fgsea_results_mp_vs_p_FILT_all_numb_02132022.csv')
 df_total <- top_GSEA(all_filt_res, n = 30)
 write.csv(df_total, 'fgsea_results_30_top_pos_neg_mp_vs_p_02132022.csv')
 
-# Visualizing most represented GSEA results across all celltypes: -------
+# Visualizing most represented GSEA results across all celltypes mp vs p: -------
 library(stringr)
 gsea <- read.csv('fgsea_results_mp_vs_p_FILT_02132022.csv')
 
+# Neutrophil chemotaxis
 paths <- c('GOBP_NEUTROPHIL_MIGRATION',
            'GOBP_GRANULOCYTE_CHEMOTAXIS',
            'GOBP_NEUTROPHIL_CHEMOTAXIS',
@@ -2580,15 +2581,301 @@ ggsave('GSEA_mp_vs_p_neutrophil_chemotaxis.png', height = 12)
 # Bar plots:
 gsea <- read.csv('fgsea_results_mp_vs_p_02132022.csv')
 results <- gsea %>% filter(pathway %in% c('GOBP_NEUTROPHIL_CHEMOTAXIS', 'GOBP_NEUTROPHIL_MIGRATION'))
-ggplot(results, aes(fill = pathway, x = cluster, y = -log10(padj))) + 
+p <- ggplot(results, aes(fill = pathway, x = cluster, y = -sign(NES)*log10(padj))) + 
+            geom_bar(position = 'dodge', stat = 'identity') + 
+            geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + geom_hline(yintercept = log10(0.05), linetype = 'dotted') +
+            coord_flip() + theme(axis.title.y = element_blank()) + 
+            theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                  panel.background = element_blank(), axis.line = element_line(colour = "black")); p
+ggsave('gobp_neutrophil_chemotaxis_mp_vs_p.png', height = 12)
+p + NoLegend()
+ggsave('gobp_neutrophil_chemotaxis_mp_vs_p_nolegend.png', height = 12)
+
+# Chemotaxis Heatmap: ----
+library(ComplexHeatmap)
+library(stringr)
+
+# Get a list of ribosome-related genes:
+gene_sets <- gene_set_maker()
+genes <- Reduce(union, gene_sets[paths])
+
+degs <- read.csv('2021-08-21 mp vs. p DEGs.csv')
+degs$trt <- str_split_fixed(degs$cellType, '_', 2)[,2]
+
+genes <- intersect(genes, degs$gene_symbol)
+quantile(degs$avg_log2FC)
+
+#degs <- filter(degs, trt %in% c('p4', 'mp4'))
+unique(intersect(degs$gene_symbol, genes))
+degs <- filter(degs, gene_symbol %in% genes)
+
+# Include only cells that have significant increases in neutrophil chemotaxis
+# And include genes that are > 0
+sig_sets <- gsea %>% filter(padj < 0.05 & NES > 0 & pathway %in% c('GOBP_NEUTROPHIL_CHEMOTAXIS', 'GOBP_NEUTROPHIL_MIGRATION'))
+sig_celltypes <- sig_sets$cluster %>% unique()
+degs <- filter(degs, cellType %in% sig_celltypes)
+
+degs <- degs[, c("gene_symbol", "avg_log2FC", 'cellType')]
+degs <- tidyr::pivot_wider(degs, 
+                           names_from = cellType, 
+                           values_from = avg_log2FC,
+                           values_fill = 0) %>% as.data.frame()
+rownames(degs) <- degs$gene_symbol
+degs <- select(degs, -c('gene_symbol'))
+
+col_fun = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+
+# Massive heatmap for data exploration:
+Heatmap(degs, cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+
+# Get top (bottom) 25 genes by average expression from these pathways:
+top25 <- sort(rowMeans(degs), decreasing = TRUE)[1:25]
+degs25 <- degs[names(top25), ]
+
+col_fun = circlize::colorRamp2(c(-3, 0, 3), c("blue3", "white", "red3"))
+Heatmap(degs25, name = 'log2FC',
+        cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+# save as 5.5 x 6.5 in pdf
+# neutrophil_chemotaxis_heatmap
+
+# Alveolar macrophage 4 hr volcano plot ------
+
+# define function to label DEGs on volcano plot for a given table:
+volcano_plotter <-  function(tab){
+  # add a column to tell whether the genes are up or down regulated
+  tab$diffexpressed <- "NO"
+  # if log2Foldchange > 0.6 and pvalue-adj < 0.05, set as "UP"
+  tab$diffexpressed[tab$avg_log2FC > 0.5 & tab$p_val_adj < 0.05] <- "UP"
+  # if log2Foldchange < -0.6 and pvalue-adj < 0.05, set as "DOWN"
+  tab$diffexpressed[tab$avg_log2FC < -0.5 & tab$p_val_adj < 0.05] <- "DOWN"
+  # adding gene symbols in a column for easy accesss
+  tab <- cbind(gene_symbol = rownames(tab), tab)
+  # defining whether a gene is sufficiently differentially expressed or not
+  tab$delabel <- NA
+  tab$delabel[tab$diffexpressed != "NO"] <- tab$gene_symbol[tab$diffexpressed != "NO"]
+  
+  # dealing with bad colors - DOES THIS WORK???????????
+  if ( !any(tab$diffexpressed == "DOWN") ){
+    colorValues <- c("black", "red")
+  } else {
+    colorValues <- c("blue", "black", "red")
+  }
+  
+  tab[,1] <- NULL
+  
+  # plotting
+  ggplot(data=tab, aes(x=avg_log2FC, y=-log10(p_val_adj), col=diffexpressed, label=delabel)) +
+    geom_point(size = 0.4) +
+    theme_classic() +
+    geom_text_repel() +
+    scale_color_manual(values=colorValues) + 
+    NoLegend() +
+    labs(x = expression('log' [2] * '(FC)'), y = expression('log' [10] * '(adj. p-value)')) +
+    theme(text = element_text(size=8, family = "sans"),
+          axis.title=element_text(size=10, family = "sans", face="bold"))
+}
+
+deg_AM <- read.csv('2021-08-21 mp vs. p DEGs.csv', row.names = 'X') %>% filter(cellType == 'AM 4 hr') 
+rownames(deg_AM) <- deg_AM$gene_symbol
+volcano_plotter(deg_AM); ggsave('AM_4_mp_vs_p_pub.png', width = 4.25, height = 4.25)
+
+deg_AM <- read.csv('2021-08-21 mp vs. p DEGs.csv', row.names = 'X') %>% filter(cellType == 'AM 24 hr') 
+rownames(deg_AM) <- deg_AM$gene_symbol
+volcano_plotter(deg_AM); ggsave('AM_24_mp_vs_p_pub.png', width = 4.25, height = 4.25)
+
+
+# TNF-a signaling: ----
+paths <- c('HALLMARK_TNFA_SIGNALING_VIA_NFKB',
+           'REACTOME_INTERLEUKIN_10_SIGNALING',
+           'GOBP_INFLAMMATORY_RESPONSE',
+           'GOBP_RESPONSE_TO_MOLECULE_OF_BACTERIAL_ORIGIN')
+
+results <- gsea %>% filter(pathway %in% paths)
+
+ggplot(results, aes(x = pathway, y = cluster, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_mp_vs_p_nfkb.png', height = 12)
+
+# Bar plots:
+gsea <- read.csv('fgsea_results_mp_vs_p_02132022.csv')
+results <- gsea %>% filter(pathway %in% c('HALLMARK_TNFA_SIGNALING_VIA_NFKB'))
+p <- ggplot(results, aes(fill = pathway, x = cluster, y = -sign(NES)*log10(padj))) + 
+            geom_bar(position = 'dodge', stat = 'identity') + 
+            geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + geom_hline(yintercept = log10(0.05), linetype = 'dotted') +
+            coord_flip() + theme(axis.title.y = element_blank()) + 
+            theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+                  panel.background = element_blank(), axis.line = element_line(colour = "black")); p
+ggsave('gobp_nfkb_mp_vs_p.png', height = 12)
+p + NoLegend()
+ggsave('gobp_nfkb_mp_vs_p_nolegend.png', height = 12)
+
+# Ion homeostasis gene ontology -----
+paths <- c('GOBP_CELLULAR_TRANSITION_METAL_ION_HOMEOSTASIS',
+           'GOBP_TRANSITION_METAL_ION_HOMEOSTASIS')
+
+results <- gsea %>% filter(pathway %in% paths)
+
+ggplot(results, aes(x = pathway, y = cluster, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_mp_vs_p_metal_ions.png', height = 12)
+
+# Bar plots:
+gsea <- read.csv('fgsea_results_mp_vs_p_02132022.csv')
+results <- gsea %>% filter(pathway %in% c('GOBP_CELLULAR_TRANSITION_METAL_ION_HOMEOSTASIS', 'GOBP_TRANSITION_METAL_ION_HOMEOSTASIS'))
+p <- ggplot(results, aes(fill = pathway, x = cluster, y = -sign(NES)*log10(padj))) + 
   geom_bar(position = 'dodge', stat = 'identity') + 
-  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + 
+  geom_hline(yintercept = -log10(0.05), linetype = 'dotted') + geom_hline(yintercept = log10(0.05), linetype = 'dotted') +
   coord_flip() + theme(axis.title.y = element_blank()) + 
   theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
-        panel.background = element_blank(), axis.line = element_line(colour = "black"))
-ggsave('gobp_neutrophil_chemotaxis_mp_vs_p.png', height = 12)
+        panel.background = element_blank(), axis.line = element_line(colour = "black")); p
+ggsave('gobp_ion_mp_vs_p_homeostasis.png', height = 12)
+p + NoLegend()
+ggsave('gobp_ion_mp_vs_p_homneostasis_nolegend.png', height = 12)
 
+# Ion homeostasis heatmap ----
+library(ComplexHeatmap)
+library(stringr)
 
+# Get a list of ribosome-related genes:
+gene_sets <- gene_set_maker()
+genes <- Reduce(union, gene_sets[paths])
+
+degs <- read.csv('2021-08-21 mp vs. p DEGs.csv')
+degs$trt <- str_split_fixed(degs$cellType, '_', 2)[,2]
+
+genes <- intersect(genes, degs$gene_symbol)
+quantile(degs$avg_log2FC)
+
+#degs <- filter(degs, trt %in% c('p4', 'mp4'))
+unique(intersect(degs$gene_symbol, genes))
+degs <- filter(degs, gene_symbol %in% genes)
+
+# Include only cells that have significant increases in iron homeostasis
+# And include genes that are > 0
+sig_sets <- gsea %>% filter(padj < 0.05 & NES > 0 & pathway %in% c('GOBP_CELLULAR_TRANSITION_METAL_ION_HOMEOSTASIS', 'GOBP_TRANSITION_METAL_ION_HOMEOSTASIS'))
+sig_celltypes <- sig_sets$cluster %>% unique()
+degs <- filter(degs, cellType %in% sig_celltypes)
+
+degs <- degs[, c("gene_symbol", "avg_log2FC", 'cellType')]
+degs <- tidyr::pivot_wider(degs, 
+                           names_from = cellType, 
+                           values_from = avg_log2FC,
+                           values_fill = 0) %>% as.data.frame()
+rownames(degs) <- degs$gene_symbol
+degs <- select(degs, -c('gene_symbol'))
+
+col_fun = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+
+# Massive heatmap for data exploration:
+Heatmap(degs, cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+
+# Get top (bottom) 10 genes by average expression from these pathways:
+top10 <- sort(rowMeans(degs), decreasing = TRUE)[1:25]
+degs10 <- degs[names(top10), ]
+
+col_fun = circlize::colorRamp2(c(-3, 0, 3), c("blue3", "white", "red3"))
+Heatmap(degs10, name = 'log2FC',
+        cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+# save as 3.5 x 9.5 in pdf
+# ion_homeostasis_mp_vs_p
+
+# Combined heatmap -----
+paths <- c('GOBP_NEUTROPHIL_MIGRATION',
+           'GOBP_GRANULOCYTE_CHEMOTAXIS',
+           'GOBP_NEUTROPHIL_CHEMOTAXIS',
+           'GOBP_GRANULOCYTE_MIGRATION',
+           'GOBP_LEUKOCYTE_CHEMOTAXIS',
+           'GOBP_CELLULAR_TRANSITION_METAL_ION_HOMEOSTASIS', 
+           'GOBP_TRANSITION_METAL_ION_HOMEOSTASIS',
+           'HALLMARK_TNFA_SIGNALING_VIA_NFKB',
+           'REACTOME_INTERLEUKIN_10_SIGNALING',
+           'GOBP_INFLAMMATORY_RESPONSE',
+           'GOBP_RESPONSE_TO_MOLECULE_OF_BACTERIAL_ORIGIN')
+
+library(ComplexHeatmap)
+library(stringr)
+
+# Get a list of ribosome-related genes:
+gene_sets <- gene_set_maker()
+genes <- Reduce(union, gene_sets[paths])
+
+degs <- read.csv('2021-08-21 mp vs. p DEGs.csv')
+degs$trt <- str_split_fixed(degs$cellType, '_', 2)[,2]
+
+genes <- intersect(genes, degs$gene_symbol)
+quantile(degs$avg_log2FC)
+
+#degs <- filter(degs, trt %in% c('p4', 'mp4'))
+unique(intersect(degs$gene_symbol, genes))
+degs <- filter(degs, gene_symbol %in% genes)
+
+sig_sets <- gsea %>% filter(padj < 0.05 & NES > 0 & pathway %in% paths)
+sig_celltypes <- sig_sets$cluster %>% unique()
+degs <- filter(degs, cellType %in% sig_celltypes)
+
+degs <- degs[, c("gene_symbol", "avg_log2FC", 'cellType')]
+degs <- tidyr::pivot_wider(degs, 
+                           names_from = cellType, 
+                           values_from = avg_log2FC,
+                           values_fill = 0) %>% as.data.frame()
+rownames(degs) <- degs$gene_symbol
+degs <- select(degs, -c('gene_symbol'))
+
+col_fun = circlize::colorRamp2(c(-1, 0, 1), c("blue", "white", "red"))
+
+# Massive heatmap for data exploration:
+Heatmap(degs, cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+
+# Get top (bottom) 10 genes by average expression from these pathways:
+top25 <- sort(rowMeans(degs), decreasing = TRUE)[1:25]
+degs25 <- degs[names(top25), ]
+
+col_fun = circlize::colorRamp2(c(-3, 0, 3), c("blue3", "white", "red3"))
+Heatmap(degs25, name = 'log2FC',
+        cluster_rows = T, cluster_columns = T, col = col_fun,
+        border_gp = gpar(col = "black", lty = 2))
+# save as 5.5 x 8 in pdf
+# ion_homeostasis_mp_vs_p
+
+# Combined dot plot mp vs p: -----
+# Make dot plot of all the categories in paths above
+library(stringr)
+
+gsea <- read.csv('fgsea_results_mp_vs_p_FILT_02132022.csv')
+
+results <- gsea %>% filter(pathway %in% paths)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_ribosome_24.png', width = 16)
+
+trts <- c('p4', 'mp4')
+results <- gsea %>% filter(pathway %in% paths) %>% filter(trt %in% trts)
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 65, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('GSEA_mp_vs_p_big.png', width = 15, height = 4)
 
 
 
