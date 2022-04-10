@@ -1284,6 +1284,8 @@ gene_set_maker <- function(){
   library(msigdbr)
   
   # msigdbr_collections()
+  # packageVersion("msigdbr")
+  # [1] ‘7.4.1’
   
   hallmarks <- msigdbr(species = "Mus musculus", category = "H")
   hallmarks <- split(x = hallmarks$gene_symbol, f = hallmarks$gs_name)
@@ -1432,20 +1434,20 @@ library(ggdendro)
 library(cowplot)
 library(ggtree)
 
-all_filt_res <- read.csv('fgsea_results_08072021_PCT_EPS_FILT.csv')
-term_frequencies <- table(all_filt_res$pathway)
-write.csv(term_frequencies, 'fgsea_results_frequencies_all_numb_08072021.csv')
+all_filt_res <- read.csv('fgsea_results_12292021_PCT_EPS_FILT.csv')
+# term_frequencies <- table(all_filt_res$pathway)
+# write.csv(term_frequencies, 'fgsea_results_frequencies_all_numb_08072021.csv')
 
 df_total <- top_GSEA(all_filt_res, n = 30)
-write.csv(df_total, 'fgsea_results_30_top_pos_neg_08072021.csv')
+# write.csv(df_total, 'fgsea_results_30_top_pos_neg_08072021.csv')
 
 all_filt_res$cellType <- gsub("(.*)_.*","\\1",all_filt_res$cluster)
 
 format_GSEA <- function(df_results, top_df, n = 25){
   df_results <- filter(df_results, pathway %in% top_df$pos_category | 
                          pathway %in% top_df$neg_category)
-  bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_', 'GOBP_')
-  df_results$pathway <- str_remove(df_results$pathway, paste(bad_str, collapse = '|'))
+  # bad_str <- c('HALLMARK_', 'REACTOME_', 'GO_', 'KEGG_', 'GOBP_')
+  # df_results$pathway <- str_remove(df_results$pathway, paste(bad_str, collapse = '|'))
   df_results$pathway <- str_trunc(df_results$pathway, n)
   return(df_results)
 }
@@ -1658,6 +1660,35 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
 ggsave('myeloid_GSEA_08072021.png', width = 10.5, height = 5)
 
 # Done 08072021
+
+# > NK Cells Only ---------------------------
+vec <- c('NK')
+
+test_res <- filter(all_filt_res, cluster %in% c('NK_p4', 'NK_mp4'))
+
+res_vec <- vector(mode = 'list', length = length(vec))
+df_vec <- vector(mode = 'list', length = length(vec))
+for (i in 1:length(vec)){
+  print(vec[[i]])
+  res_vec[[i]] <- filter(test_res, cellType %in% vec[[i]])
+  df_vec[[i]] <- top_GSEA(res_vec[[i]], n = 7)
+}
+df <- do.call(rbind, df_vec)
+results <- do.call(rbind, res_vec)
+results <- format_GSEA(results, df, n=85)
+orders <- vector(mode = 'character', length = length(vec)*4)
+trtList <- c("p4", "mp4")
+
+orders <- c('NK_p4', 'NK_mp4')
+
+ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj))) + 
+  geom_point() + cowplot::theme_cowplot() + 
+  scale_x_discrete(limits=orders) +
+  theme(axis.title.y = element_blank(), 
+        axis.title.x = element_blank(),
+        axis.text.x = element_text(angle = 30, hjust = 1)) + 
+  scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
+ggsave('nk_GSEA_04032021.png', width = 11, height = 5)
 
 # Important Violin and Feature Plots --------------
 # combined <- readRDS('combined_07292021_v2.rds')
@@ -2651,7 +2682,7 @@ volcano_plotter <-  function(tab){
   # if log2Foldchange < -0.6 and pvalue-adj < 0.05, set as "DOWN"
   tab$diffexpressed[tab$avg_log2FC < -0.5 & tab$p_val_adj < 0.05] <- "DOWN"
   # adding gene symbols in a column for easy accesss
-  tab <- cbind(gene_symbol = rownames(tab), tab)
+  # tab <- cbind(gene_symbol = rownames(tab), tab)
   # defining whether a gene is sufficiently differentially expressed or not
   tab$delabel <- NA
   tab$delabel[tab$diffexpressed != "NO"] <- tab$gene_symbol[tab$diffexpressed != "NO"]
@@ -2662,8 +2693,6 @@ volcano_plotter <-  function(tab){
   } else {
     colorValues <- c("blue", "black", "red")
   }
-  
-  tab[,1] <- NULL
   
   # plotting
   ggplot(data=tab, aes(x=avg_log2FC, y=-log10(p_val_adj), col=diffexpressed, label=delabel)) +
@@ -2684,7 +2713,6 @@ volcano_plotter(deg_AM); ggsave('AM_4_mp_vs_p_pub.png', width = 4.25, height = 4
 deg_AM <- read.csv('2021-08-21 mp vs. p DEGs.csv', row.names = 'X') %>% filter(cellType == 'AM 24 hr') 
 rownames(deg_AM) <- deg_AM$gene_symbol
 volcano_plotter(deg_AM); ggsave('AM_24_mp_vs_p_pub.png', width = 4.25, height = 4.25)
-
 
 # TNF-a signaling: ----
 paths <- c('HALLMARK_TNFA_SIGNALING_VIA_NFKB',
@@ -2877,5 +2905,23 @@ ggplot(results, aes(x = cluster, y = pathway, color = NES, size = -log10(padj)))
   scale_color_gradient2(low = 'blue', mid = 'white',  high = 'red')
 ggsave('GSEA_mp_vs_p_big.png', width = 15, height = 4)
 
+# Plotting NK cell DEGs and GSEA only: ----
+# These cells did not downregulate ribosomes at 4 hours
+# GSEA plotted above
+# DEG:
+deg_NK <- read.csv('2021-07-29 DEGs.csv', row.names = 'X') %>% filter(cellType == 'NK_p4') 
+rownames(deg_AM) <- deg_AM$gene_symbol
+volcano_plotter(deg_NK); ggsave('NK_p4_deg.png', width = 4.25, height = 4.25)
 
+deg_NK <- read.csv('2021-07-29 DEGs.csv', row.names = 'X') %>% filter(cellType == 'NK_mp4') 
+rownames(deg_AM) <- deg_AM$gene_symbol
+volcano_plotter(deg_NK); ggsave('NK_mp4_deg.png', width = 4.25, height = 4.25)
+
+deg_NK <- read.csv('2021-07-29 DEGs.csv', row.names = 'X') %>% filter(cellType == 'NK_p24') 
+rownames(deg_AM) <- deg_AM$gene_symbol
+volcano_plotter(deg_NK); ggsave('NK_p24_deg.png', width = 4.25, height = 4.25)
+
+deg_NK <- read.csv('2021-07-29 DEGs.csv', row.names = 'X') %>% filter(cellType == 'NK_mp24') 
+rownames(deg_AM) <- deg_AM$gene_symbol
+volcano_plotter(deg_NK); ggsave('NK_mp24_deg.png', width = 4.25, height = 4.25)
 
