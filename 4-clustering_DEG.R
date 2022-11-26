@@ -2925,3 +2925,29 @@ deg_NK <- read.csv('2021-07-29 DEGs.csv', row.names = 'X') %>% filter(cellType =
 rownames(deg_AM) <- deg_AM$gene_symbol
 volcano_plotter(deg_NK); ggsave('NK_mp24_deg.png', width = 4.25, height = 4.25)
 
+# November 2022 below
+
+# Plotting Table 1 with Cell Counts per Read for publication: -----
+# combined <- readRDS('combined_07292021_v2.rds')
+# number of cells per treatment
+t1 <- table(combined$orig.ident)
+write.csv(t1, 'Table1_Cell_Counts.csv')
+
+# Plotting full biomarker list for publication: -----
+# combined <- readRDS('combined_07292021_v2.rds')
+
+Idents(combined) <- 'celltype'
+DefaultAssay(combined) <- "SCT"
+combined.markers <- FindAllMarkers(combined, only.pos = FALSE, 
+                                   min.pct = 0, logfc.threshold = 0, 
+                                   max.cells.per.ident = Inf)
+top10 <- combined.markers %>% group_by(cluster)
+write.csv(combined.markers, file = "TableS3_gene_biomarkers.csv", row.names = FALSE)
+
+# Plotting IgD and IgM for publication of B cells: ----
+# combined <- readRDS('combined_07292021_v2.rds')
+# Idents(combined) <- 'celltype'
+
+FeaturePlot(combined, features = c('IgM-TotalA', 'IgD-TotalA'))
+ggsave('B_cell_markers.png')
+
