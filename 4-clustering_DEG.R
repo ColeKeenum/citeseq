@@ -2933,21 +2933,43 @@ volcano_plotter(deg_NK); ggsave('NK_mp24_deg.png', width = 4.25, height = 4.25)
 t1 <- table(combined$orig.ident)
 write.csv(t1, 'Table1_Cell_Counts.csv')
 
-# Plotting full biomarker list for publication: -----
+# Plotting Table S3 full biomarker list for publication: -----
 # combined <- readRDS('combined_07292021_v2.rds')
+# library(future)
+# plan('multisession', workers=2)
 
 Idents(combined) <- 'celltype'
 DefaultAssay(combined) <- "SCT"
-combined.markers <- FindAllMarkers(combined, only.pos = FALSE, 
+combined <- PrepSCTFindMarkers(combined, assay = "SCT", verbose = FALSE)
+combined.markers <- FindAllMarkers(combined, only.pos = TRUE, 
                                    min.pct = 0, logfc.threshold = 0, 
                                    max.cells.per.ident = Inf)
-top10 <- combined.markers %>% group_by(cluster)
-write.csv(combined.markers, file = "TableS3_gene_biomarkers.csv", row.names = FALSE)
+write.csv(combined.markers, file = "TableS3_gene_biomarkers_v2.csv", row.names = FALSE)
 
 # Plotting IgD and IgM for publication of B cells: ----
 # combined <- readRDS('combined_07292021_v2.rds')
-# Idents(combined) <- 'celltype'
+Idents(combined) <- 'celltype'
+DefaultAssay(combined) <- 'ADT'
+bcells <- subset(combined, idents = c('Mature B', 'Immature B'))
+p <- FeaturePlot(bcells, features = c('IgD-TotalA'), reduction = 'wnn.umap', 
+                  min.cutoff = 0, cols = c("lightgrey","darkgreen"))
+CellSelector(p)
+# [1] "mp4_CTGAGGCAGCCTCGTG-1"
+bcells <- subset(bcells, cells = "mp4_CTGAGGCAGCCTCGTG-1", invert = T)
 
-FeaturePlot(combined, features = c('IgM-TotalA', 'IgD-TotalA'))
-ggsave('B_cell_markers.png')
+DefaultAssay(bcells) <- 'ADT'
+FeaturePlot(bcells, features = c('IgD-TotalA'), reduction = 'wnn.umap', 
+            min.cutoff = 0, cols = c("lightgrey","darkgreen"))
+ggsave('B_cell_markers_IgM.png', width = 4, height = 4)
 
+DefaultAssay(bcells) <- 'SCT'
+FeaturePlot(bcells, features = c('Ighm'), reduction = 'wnn.umap', 
+            min.cutoff = 0) 
+ggsave('B_cell_markers_Ighm.png', width = 4, height = 4)
+
+DimPlot(bcells, reduction = 'wnn.umap')
+ggsave('B_cell_types.png', width = 5, height = 4)
+
+# FindMarkers for B cells:
+degs <- FindMarkers(combined, ident.1 = 'Immature B', ident.2 = 'Mature B')
+write.csv(degs, 'bcell_markers.csv')
