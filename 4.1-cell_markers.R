@@ -779,7 +779,7 @@ markers.to.plot <- c("Ms4a6c", "Plac8", "Bst2", "Irf7", "Irf5")
 DotPlot(combined, assay = "integratedSCT_", features  = markers.to.plot)
 
 # Neutrophil Markers ---------
-# Markers based on Zillionis paper
+# Markers based on Zillionis paper: https://doi.org/10.1016/j.immuni.2019.03.009
 markers.to.plot <- c('Mmp8', 'Ifit1', 'Cxcl3', 'Pald1', 'Ccl3', 'Ctsc')
 DefaultAssay(combined) <- "SCT"
 for (marker in markers.to.plot){
