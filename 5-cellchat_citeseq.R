@@ -4,6 +4,8 @@ library(patchwork)
 library(Seurat)
 options(stringsAsFactors = FALSE)
 
+# ERROR: dependencies ‘ggpubr’, ‘BiocNeighbors’ are not available for package ‘CellChat’
+
 #setwd("C:/Users/colek/Desktop/Roy Lab/CITE-Seq Data")
 setwd('~/Documents/citeseq-code')
 
@@ -580,4 +582,27 @@ netVisual_individual(object.list[[5]], signaling = 'IL1', pairLR.use = 'IL1A_IL1
 netVisual_individual(object.list[[1]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "circle")
 netVisual_individual(object.list[[4]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "circle")
 netVisual_individual(object.list[[5]], signaling = 'IL1', pairLR.use = 'IL1B_IL1R2', layout = "circle")
+
+# Cxcl1 signaling ----
+# naive
+netVisual_individual(object.list[[1]], signaling = 'CXCL', pairLR.use = 'CXCL1_CXCR2', layout = "chord")
+# p4
+netVisual_individual(object.list[[2]], signaling = 'CXCL', pairLR.use = 'CXCL1_CXCR2', layout = "chord")
+#mp4
+netVisual_individual(object.list[[3]], signaling = 'CXCL', pairLR.use = 'CXCL1_CXCR2', layout = "chord")
+
+# Cxcl2 signaling ----
+# naive
+netVisual_individual(object.list[[1]], signaling = 'CXCL', pairLR.use = 'CXCL2_CXCR2', layout = "chord")
+# p4
+netVisual_individual(object.list[[2]], signaling = 'CXCL', pairLR.use = 'CXCL2_CXCR2', layout = "chord")
+#mp4
+netVisual_individual(object.list[[3]], signaling = 'CXCL', pairLR.use = 'CXCL2_CXCR2', layout = "chord")
+
+# naive
+netVisual_individual(object.list[[1]], signaling = 'CXCL', pairLR.use = 'CXCL2_CXCR2', layout = "circle")
+# p4
+netVisual_individual(object.list[[2]], signaling = 'CXCL', pairLR.use = 'CXCL2_CXCR2', layout = "circle")
+#mp4
+netVisual_individual(object.list[[3]], signaling = 'CXCL', pairLR.use = 'CXCL2_CXCR2', layout = "circle")
 

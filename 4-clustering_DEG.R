@@ -1198,9 +1198,9 @@ for (i in 1:length(x = cellList)){
       # add a column to tell whether the genes are up or down regulated
       degList[[(i-1)*4+j]]$diffexpressed <- "NO"
       # if log2Foldchange > 0.6 and pvalue < 0.05, set as "UP"
-      degList[[(i-1)*4+j]]$diffexpressed[degList[[(i-1)*4+j]]$avg_log2FC > 0.6 & degList[[(i-1)*4+j]]$p_val < 0.05] <- "UP"
+      degList[[(i-1)*4+j]]$diffexpressed[degList[[(i-1)*4+j]]$avg_log2FC > 0.6 & degList[[(i-1)*4+j]]$p_val_adj < 0.05] <- "UP"
       # if log2Foldchange < -0.6 and pvalue < 0.05, set as "DOWN"
-      degList[[(i-1)*4+j]]$diffexpressed[degList[[(i-1)*4+j]]$avg_log2FC < -0.6 & degList[[(i-1)*4+j]]$p_val < 0.05] <- "DOWN"
+      degList[[(i-1)*4+j]]$diffexpressed[degList[[(i-1)*4+j]]$avg_log2FC < -0.6 & degList[[(i-1)*4+j]]$p_val_adj < 0.05] <- "DOWN"
       # adding gene symbols in a column for easy accesss
       degList[[(i-1)*4+j]] <- cbind(gene_symbol = rownames(degList[[(i-1)*4+j]]), degList[[(i-1)*4+j]])
       # defining whether a gene is sufficiently differentially expressed or not
@@ -1208,7 +1208,7 @@ for (i in 1:length(x = cellList)){
       degList[[(i-1)*4+j]]$delabel[degList[[(i-1)*4+j]]$diffexpressed != "NO"] <- degList[[(i-1)*4+j]]$gene_symbol[degList[[(i-1)*4+j]]$diffexpressed != "NO"]
       # plotting
       
-      graphList[[(i-1)*4+j]] <- ggplot(data=degList[[(i-1)*4+j]], aes(x=avg_log2FC, y=-log10(p_val), col=diffexpressed, label=delabel)) +
+      graphList[[(i-1)*4+j]] <- ggplot(data=degList[[(i-1)*4+j]], aes(x=avg_log2FC, y=-log10(p_val_adj), col=diffexpressed, label=delabel)) +
         geom_point(size = 0.4) +
         theme_classic() +
         geom_text_repel() +
@@ -2973,3 +2973,15 @@ ggsave('B_cell_types.png', width = 5, height = 4)
 # FindMarkers for B cells:
 degs <- FindMarkers(combined, ident.1 = 'Immature B', ident.2 = 'Mature B')
 write.csv(degs, 'bcell_markers.csv')
+
+# Plot DEGs based on the DEG csv file:
+degs <- read.csv('2021-07-29 DEGs.csv', row.names = 'X') 
+c <- unique(degs$cellType)
+for (celltype in c){
+  c_df <- filter(degs, cellType == celltype)
+  rownames(c_df) <- c_df$gene_symbol
+  volcano_plotter(c_df)
+  ggsave(paste(celltype, '_DEG_v4.png', sep = ""), width = 3.5, height = 3.5)
+  }
+
+
